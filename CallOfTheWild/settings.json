@@ -1,7 +1,7 @@
 {
   "update_companions": true,
   "nerf_animal_companion": true,
-  "reduce_skill_points": true,
+  "reduce_skill_points": false,
   "sacred_huntsmaster_animal_focus": true,
   "use_armor_in_wildshape": true,
   "x3_crit_multiplier_for_flails": true,

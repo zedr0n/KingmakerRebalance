@@ -229,7 +229,7 @@ namespace CallOfTheWild
 
 
 #if DEBUG
-                    string guid_file_name = @"C:\Repositories\KingmakerRebalance\CallOfTheWild\blueprints.txt";
+                    string guid_file_name = @"G:\dev\KingmakerRebalance\CallOfTheWild\blueprints.txt";
                     CallOfTheWild.Helpers.GuidStorage.dump(guid_file_name);
 #endif
                     CallOfTheWild.Helpers.GuidStorage.dump(@"./Mods/CallOfTheWild/loaded_blueprints.txt");

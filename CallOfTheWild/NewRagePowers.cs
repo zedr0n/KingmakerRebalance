@@ -32,6 +32,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using CallOfTheWild.NewMechanics;
 using static Kingmaker.UnitLogic.Commands.Base.UnitCommand;
 
 namespace CallOfTheWild
@@ -80,6 +81,7 @@ namespace CallOfTheWild
         static public BlueprintFeature greater_daemon_totem;
         static public BlueprintFeature superstition_feature;
         static public BlueprintBuff superstition_buff;
+        static public BlueprintBuff healing_debuff;
         static public BlueprintFeature ghost_rager_feature;
         static public BlueprintBuff ghost_rager_buff;
         static public BlueprintFeature witch_hunter_feature;
@@ -740,8 +742,61 @@ namespace CallOfTheWild
             addToSelection(taunting_stance);
         }
 
-
         static void createSuperstition()
+        {
+            var spell_resistance = library.Get<BlueprintAbility>("0a5ddfbcfb3989543ac7c936fc256889");
+            superstition_buff = Helpers.CreateBuff("SuperstitionEffectBuff",
+                                                         "Superstition",
+                                                         //"The Barbarian gains spell resistance 5. It increases by 5 points at level 4 and every 4 levels therafter to a maximum of 30 at level 20.\n"
+                                                         //+ "This spell resistance applies both against harmful and friendly spells.",
+                                                         " The barbarian gains a +2 morale bonus on saving throws made to resist spells, supernatural abilities, and spell-like abilities. This bonus increases by +1 for every 4 levels the barbarian has attained.\n"
+                                                         + "While raging, the barbarian cannot be a willing target of any spell and must make saving throws to resist all hostile spells.",
+                                                         "",
+                                                         null,
+                                                         null,
+                                                         Helpers.Create<NewMechanics.SavingThrowBonusAgainstSpellSource>(s => s.Value = Helpers.CreateContextValue(AbilityRankType.StatBonus)),
+                                                         //Helpers.Create<AddSpellResistance>(s => s.Value = Helpers.CreateContextValue(AbilityRankType.StatBonus)),
+                                                         Helpers.CreateContextRankConfig(baseValueType: ContextRankBaseValueType.ClassLevel, progression: ContextRankProgression.Custom,
+                                                                                         type: AbilityRankType.StatBonus, classes: new BlueprintCharacterClass[] { barbarian_class },
+                                                                                         customProgression: new (int, int)[] {
+                                                                                                                                (3, 1),
+                                                                                                                                (7, 2),
+                                                                                                                                (11, 3),
+                                                                                                                                (15, 4),
+                                                                                                                                (19, 5),
+                                                                                                                                (20, 6)
+                                                                                                                             }
+                                                                                         )
+                                                         );
+            
+            superstition_buff.SetBuffFlags(BuffFlags.HiddenInUi);
+            
+            healing_debuff = Helpers.CreateBuff("HealingDebuff",
+                "HealingDebuff",
+                "All incoming healing effects are halved",
+                "",
+                null,
+                null,
+                Helpers.Create<HealingMechanics.IncomingHealingModifier>(i => i.ModifierPercents = 50)
+            );
+                
+            healing_debuff.SetBuffFlags(BuffFlags.HiddenInUi);
+            
+            superstition_feature = Helpers.CreateFeature("SuperstitionFeature",
+                                                           superstition_buff.Name,
+                                                           superstition_buff.Description,
+                                                           "",
+                                                           spell_resistance.Icon,
+                                                           FeatureGroup.RagePower);
+            
+
+            // Common.addContextActionApplyBuffOnConditionToActivatedAbilityBuff(superstition_buff, conditional_sr);
+            Common.addContextActionApplyBuffOnFactsToActivatedAbilityBuffNoRemove(rage_buff, superstition_buff, superstition_feature);
+            addToSelection(superstition_feature);
+        }
+
+
+        static void createSuperstitionSR()
         {
             var spell_resistance = library.Get<BlueprintAbility>("0a5ddfbcfb3989543ac7c936fc256889");
             superstition_buff = Helpers.CreateBuff("SuperstitionEffectBuff",
@@ -885,6 +940,32 @@ namespace CallOfTheWild
             }
         }
     }
+    
+    public static class AbilityExtensions
+    {
+        public static bool HasThrow(this BlueprintAbility ability, UnitEntityData target)
+        {
+            if (target == null)
+                return false;
+            
+            var throwString = ability.LocalizedSavingThrow.ToString();
+
+            if (throwString == "")
+                return false;
+
+            // heal spells have saving throw description but it's not applied when used for healing
+            // so need to revert to spell resistance
+            if (ability.IsHealing() && target.IsPlayerFaction)
+                return false;
+
+            return true;
+        }
+
+        public static bool IsHealing(this BlueprintAbility ability)
+        {
+            return (ability.SpellDescriptor & SpellDescriptor.RestoreHP) != 0;
+        }
+    }
 
 
     [Harmony12.HarmonyPatch(typeof(RuleSpellResistanceCheck))]
@@ -895,13 +976,96 @@ namespace CallOfTheWild
         {
             if (__result == false && __instance.Target.Descriptor.Buffs.HasFact(NewRagePowers.superstition_buff))
             {
+                // only apply the spell resistance for allies
+                if (__instance.Context.MaybeCaster == null || !__instance.Context.MaybeCaster.IsPlayerFaction)
+                    return;
+
+                // check if the spell has an explicit saving throw then don't use spell resistance
+                if (__instance.Ability != null && __instance.Ability.HasThrow(__instance.Target))
+                {
+                    Common.AddBattleLogMessage($"{__instance.Ability.Name} has a saving throw : {__instance.Ability.LocalizedSavingThrow.ToString()}");
+                    return;
+                }
+
                 __result = (__instance.Ability != null) && __instance.Ability.IsSpell;
+#if DEBUG
+                Common.AddBattleLogMessage($"Resistance roll forced on spells due to superstition, SR set to {__instance.SpellResistance}!");
+#endif
             }
         }
     }
 
+    [Harmony12.HarmonyPatch(typeof(RuleSpellResistanceCheck))]
+    [Harmony12.HarmonyPatch("IsSpellResisted", Harmony12.MethodType.Getter)]
+    class Patch_RuleSpellResistanceCheck_IsSpellResisted_Postfix
+    {
+        static public void Postfix(RuleSpellResistanceCheck __instance, ref bool __result)
+        {
+            if (!__instance.Target.Descriptor.Buffs.HasFact(NewRagePowers.superstition_buff))
+                return;
+            
+            // if resisted a healing spell
+            if (__result && __instance.Ability != null && __instance.Ability.IsHealing())
+            {
+                __result = false;
+                // Common.AddBattleLogMessage("Save failed on healing, applying healing debuff");
+                
+                __instance.Target.Buffs.AddBuff(NewRagePowers.healing_debuff, __instance.Target,
+                    TimeSpan.FromSeconds(1));
+            }
+        }
+    }
 
-    [Harmony12.HarmonyPatch(typeof(AreaEffectEntityData))]
+    [Harmony12.HarmonyPatch(typeof(RuleSpellResistanceCheck))]
+    [Harmony12.HarmonyPatch("SpellResistance", Harmony12.MethodType.Getter)]
+    class Patch_RuleSpellResistanceCheck_SpellResistance_Postfix
+    {
+        static public void Postfix(RuleSpellResistanceCheck __instance, ref int __result)
+        {
+            if (!__instance.Target.Descriptor.Buffs.HasFact(NewRagePowers.superstition_buff))
+                return;
+
+            // only apply the spell resistance for allies
+            if (__instance.Context.MaybeCaster == null || !__instance.Context.MaybeCaster.IsPlayerFaction)
+                return;
+            
+            // check if the spell has an explicit saving throw then don't add spell resistance bonus
+            if (__instance.Ability != null && __instance.Ability.HasThrow(__instance.Target))
+                return;
+
+            var brbLevel =
+                __instance.Target.Descriptor.Progression.Classes.SingleOrDefault(c =>
+                    c.CharacterClass.Name == "Barbarian")?.Level;
+
+            // shouldn't really happen but just in case
+            if (brbLevel == null)
+                return;
+                
+            var progression = new (int, int)[]
+            {
+                (0, 0),
+                (3, 5),
+                (7, 10),
+                (11, 15),
+                (15, 20),
+                (19, 25),
+                (20, 30)
+            };
+            
+            /*var forcedSR = new (int, int)[]
+            {
+                (0, 0),
+                (3, 20)
+            };*/
+
+            // var bonus = progression.Last(p => p.Item1 < brbLevel).Item2;
+            var bonus = progression.Last(p => p.Item1 < brbLevel).Item2;
+            __result += bonus;
+        }
+    }
+    
+
+    /*[Harmony12.HarmonyPatch(typeof(AreaEffectEntityData))]
     [Harmony12.HarmonyPatch("TryOvercomeSpellResistance", Harmony12.MethodType.Normal)]
     class Patch_AreaEffectEntityData_TryOvercomeSpellResistance_Transpiler
     {
@@ -928,5 +1092,5 @@ namespace CallOfTheWild
             }
             return area.SpellResistance || unit.Descriptor.Buffs.HasFact(NewRagePowers.superstition_buff);
         }
-    }
+    }*/
 }

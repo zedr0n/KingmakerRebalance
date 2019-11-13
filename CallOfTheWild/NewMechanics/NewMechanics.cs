@@ -30,6 +30,7 @@ using Kingmaker.Items;
 using Kingmaker.UnitLogic.Abilities.Components.Base;
 using Kingmaker.EntitySystem.Entities;
 using System.Collections.Generic;
+using System.Data;
 using Kingmaker.UnitLogic.Mechanics.Components;
 using Kingmaker.UnitLogic.Class.Kineticist;
 using Kingmaker.Blueprints.Validation;
@@ -69,6 +70,7 @@ using Kingmaker.AreaLogic.Cutscenes.Commands;
 using Pathfinding;
 using Kingmaker.Controllers.Combat;
 using Kingmaker.UnitLogic.Abilities.Components.AreaEffects;
+using Kingmaker.UnitLogic.FactLogic;
 
 namespace CallOfTheWild
 {
@@ -263,8 +265,38 @@ namespace CallOfTheWild
             {
             }
         }
+        
+        
+        [AllowedOn(typeof(BlueprintUnitFact))]
+        [AllowMultipleComponents]
+        [ComponentName("Saving throw bonus against spells")]
+        public class SavingThrowBonusAgainstSpellSource : RuleInitiatorLogicComponent<RuleSavingThrow>
+        {   
+            public ContextValue Value;
+            public SpellSource Source = SpellSource.Arcane;
 
+            public ModifierDescriptor Descriptor = ModifierDescriptor.Morale;
 
+            public override void OnEventAboutToTrigger(RuleSavingThrow evt)
+            {
+                var ability = evt.Reason?.Ability;
+
+                var isSpell = ability != null && ability.Blueprint.Type == AbilityType.Spell &&
+                              ability.SpellSource == Source;
+
+                isSpell |= evt.Reason?.Context?.SourceAbility?.IsSpell ?? false;
+                
+                if (isSpell)
+                {
+                    var value = this.Value.Calculate(this.Fact is IFactContextOwner fact ? fact.Context : (MechanicsContext) null);
+                    evt.AddTemporaryModifier(evt.Initiator.Stats.SaveWill.AddModifier(value, this, Descriptor));
+                    evt.AddTemporaryModifier(evt.Initiator.Stats.SaveReflex.AddModifier(value, this, Descriptor)); 
+                    evt.AddTemporaryModifier(evt.Initiator.Stats.SaveFortitude.AddModifier(value, this, Descriptor));
+                }
+            }
+
+            public override void OnEventDidTrigger(RuleSavingThrow evt) { }
+        }
 
         [AllowMultipleComponents]
         [AllowedOn(typeof(BlueprintAbility))]
