@@ -1010,8 +1010,8 @@ namespace CallOfTheWild
                 __result = false;
                 // Common.AddBattleLogMessage("Save failed on healing, applying healing debuff");
                 
-                __instance.Target.Buffs.AddBuff(NewRagePowers.healing_debuff, __instance.Target,
-                    TimeSpan.FromSeconds(1));
+                if (!__instance.Target.Buffs.HasFact(NewRagePowers.healing_debuff))
+                    __instance.Target.Buffs.AddBuff(NewRagePowers.healing_debuff, __instance.Target, TimeSpan.FromSeconds(1));
             }
         }
     }
