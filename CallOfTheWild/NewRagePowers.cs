@@ -750,11 +750,16 @@ namespace CallOfTheWild
                                                          //"The Barbarian gains spell resistance 5. It increases by 5 points at level 4 and every 4 levels therafter to a maximum of 30 at level 20.\n"
                                                          //+ "This spell resistance applies both against harmful and friendly spells.",
                                                          " The barbarian gains a +2 morale bonus on saving throws made to resist spells, supernatural abilities, and spell-like abilities. This bonus increases by +1 for every 4 levels the barbarian has attained.\n"
-                                                         + "While raging, the barbarian cannot be a willing target of any spell and must make saving throws to resist all hostile spells.",
+                                                         + "While raging, the barbarian cannot be a willing target of any spell and must make saving throws to resist all  spells.",
                                                          "",
                                                          null,
                                                          null,
-                                                         Helpers.Create<NewMechanics.SavingThrowBonusAgainstSpellSource>(s => s.Value = Helpers.CreateContextValue(AbilityRankType.StatBonus)),
+                                                         Helpers.Create<NewMechanics.SavingThrowBonusAgainstSpells>(s =>
+                                                         {
+                                                             s.IncludeSupernatural = true;
+                                                             s.Value = Helpers.CreateContextValue(AbilityRankType
+                                                                     .StatBonus);
+                                                         }),
                                                          //Helpers.Create<AddSpellResistance>(s => s.Value = Helpers.CreateContextValue(AbilityRankType.StatBonus)),
                                                          Helpers.CreateContextRankConfig(baseValueType: ContextRankBaseValueType.ClassLevel, progression: ContextRankProgression.Custom,
                                                                                          type: AbilityRankType.StatBonus, classes: new BlueprintCharacterClass[] { barbarian_class },
@@ -941,31 +946,7 @@ namespace CallOfTheWild
         }
     }
     
-    public static class AbilityExtensions
-    {
-        public static bool HasThrow(this BlueprintAbility ability, UnitEntityData target)
-        {
-            if (target == null)
-                return false;
-            
-            var throwString = ability.LocalizedSavingThrow.ToString();
 
-            if (throwString == "")
-                return false;
-
-            // heal spells have saving throw description but it's not applied when used for healing
-            // so need to revert to spell resistance
-            if (ability.IsHealing() && target.IsPlayerFaction)
-                return false;
-
-            return true;
-        }
-
-        public static bool IsHealing(this BlueprintAbility ability)
-        {
-            return (ability.SpellDescriptor & SpellDescriptor.RestoreHP) != 0;
-        }
-    }
 
 
     [Harmony12.HarmonyPatch(typeof(RuleSpellResistanceCheck))]
@@ -977,17 +958,19 @@ namespace CallOfTheWild
             if (__result == false && __instance.Target.Descriptor.Buffs.HasFact(NewRagePowers.superstition_buff))
             {
                 // only apply the spell resistance for allies
-                if (__instance.Context.MaybeCaster == null || !__instance.Context.MaybeCaster.IsPlayerFaction)
-                    return;
+                // if (__instance.Context.MaybeCaster == null || __instance.Context.MaybeCaster.IsPlayersEnemy)
+                //    return;
 
                 // check if the spell has an explicit saving throw then don't use spell resistance
                 if (__instance.Ability != null && __instance.Ability.HasThrow(__instance.Target))
                 {
+#if DEBUG
                     Common.AddBattleLogMessage($"{__instance.Ability.Name} has a saving throw : {__instance.Ability.LocalizedSavingThrow.ToString()}");
+#endif
                     return;
                 }
 
-                __result = (__instance.Ability != null) && __instance.Ability.IsSpell;
+                __result = (__instance.Ability != null) && __instance.Ability.IsSpellLike(true);
 #if DEBUG
                 Common.AddBattleLogMessage($"Resistance roll forced on spells due to superstition, SR set to {__instance.SpellResistance}!");
 #endif
@@ -1005,7 +988,7 @@ namespace CallOfTheWild
                 return;
             
             // if resisted a healing spell
-            if (__result && __instance.Ability != null && __instance.Ability.IsHealing())
+            if (__result && __instance.Ability != null && __instance.Ability.IsHealing() && __instance.Ability.IsSpellLike(true))
             {
                 __result = false;
                 // Common.AddBattleLogMessage("Save failed on healing, applying healing debuff");
@@ -1025,12 +1008,16 @@ namespace CallOfTheWild
             if (!__instance.Target.Descriptor.Buffs.HasFact(NewRagePowers.superstition_buff))
                 return;
 
+            var caster = __instance.Reason.Caster;
             // only apply the spell resistance for allies
-            if (__instance.Context.MaybeCaster == null || !__instance.Context.MaybeCaster.IsPlayerFaction)
+            // if (caster == null || caster.IsPlayersEnemy)
+            //    return;
+
+            if (__instance.Ability == null)
                 return;
             
             // check if the spell has an explicit saving throw then don't add spell resistance bonus
-            if (__instance.Ability != null && __instance.Ability.HasThrow(__instance.Target))
+            if (!__instance.Ability.IsSpellLike(true) || __instance.Ability.HasThrow(__instance.Target) )
                 return;
 
             var brbLevel =

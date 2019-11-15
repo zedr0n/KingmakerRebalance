@@ -71,9 +71,46 @@ using Pathfinding;
 using Kingmaker.Controllers.Combat;
 using Kingmaker.UnitLogic.Abilities.Components.AreaEffects;
 using Kingmaker.UnitLogic.FactLogic;
+using QuickGraph;
 
 namespace CallOfTheWild
 {
+    public static class AbilityExtensions
+    {
+        public static bool HasThrow(this BlueprintAbility ability, UnitEntityData target)
+        {
+            if (target == null)
+                return false;
+
+            var throwString = ability.LocalizedSavingThrow.ToString();
+
+            if (throwString == "")
+                return false;
+
+            // heal spells have saving throw description but it's not applied when used for healing
+            // so need to revert to spell resistance
+            if (ability.IsHealing() && !target.IsPlayersEnemy)
+                return false;
+
+            return true;
+        }
+        
+        public static bool IsSpellLike(this BlueprintAbility ability, bool includeSupernatural)
+        {
+            var isSpell = ability.Type == AbilityType.Spell;
+            isSpell |= ability.Type == AbilityType.SpellLike;
+            isSpell |= ability.Type == AbilityType.Supernatural && includeSupernatural;
+
+            return isSpell;
+        }
+
+
+        public static bool IsHealing(this BlueprintAbility ability)
+        {
+            return (ability.SpellDescriptor & SpellDescriptor.RestoreHP) != 0;
+        }
+    }
+
     namespace NewMechanics
     {
 
@@ -270,29 +307,26 @@ namespace CallOfTheWild
         [AllowedOn(typeof(BlueprintUnitFact))]
         [AllowMultipleComponents]
         [ComponentName("Saving throw bonus against spells")]
-        public class SavingThrowBonusAgainstSpellSource : RuleInitiatorLogicComponent<RuleSavingThrow>
+        public class SavingThrowBonusAgainstSpells : RuleInitiatorLogicComponent<RuleSavingThrow>
         {   
             public ContextValue Value;
-            public SpellSource Source = SpellSource.Arcane;
-
+            public bool IncludeSupernatural = false;
             public ModifierDescriptor Descriptor = ModifierDescriptor.Morale;
+
 
             public override void OnEventAboutToTrigger(RuleSavingThrow evt)
             {
                 var ability = evt.Reason?.Ability;
+                var sourceAbility = evt.Reason?.Context?.SourceAbility;
 
-                var isSpell = ability != null && ability.Blueprint.Type == AbilityType.Spell &&
-                              ability.SpellSource == Source;
-
-                isSpell |= evt.Reason?.Context?.SourceAbility?.IsSpell ?? false;
+                if ((ability?.Blueprint?.IsSpellLike(IncludeSupernatural) ?? false)
+                    && (!sourceAbility?.IsSpellLike(IncludeSupernatural) ?? false)) 
+                    return;
                 
-                if (isSpell)
-                {
-                    var value = this.Value.Calculate(this.Fact is IFactContextOwner fact ? fact.Context : (MechanicsContext) null);
-                    evt.AddTemporaryModifier(evt.Initiator.Stats.SaveWill.AddModifier(value, this, Descriptor));
-                    evt.AddTemporaryModifier(evt.Initiator.Stats.SaveReflex.AddModifier(value, this, Descriptor)); 
-                    evt.AddTemporaryModifier(evt.Initiator.Stats.SaveFortitude.AddModifier(value, this, Descriptor));
-                }
+                var value = this.Value.Calculate(this.Fact is IFactContextOwner fact ? fact.Context : (MechanicsContext) null);
+                evt.AddTemporaryModifier(evt.Initiator.Stats.SaveWill.AddModifier(value, this, Descriptor));
+                evt.AddTemporaryModifier(evt.Initiator.Stats.SaveReflex.AddModifier(value, this, Descriptor)); 
+                evt.AddTemporaryModifier(evt.Initiator.Stats.SaveFortitude.AddModifier(value, this, Descriptor));
             }
 
             public override void OnEventDidTrigger(RuleSavingThrow evt) { }
