@@ -29,6 +29,8 @@ New feats:
 - Furious Focus,
 - Felling Smash,
 - Strike True,
+- Artful Dodge,
+- Osyluth Guile,
 - Devastating Strike,
 - Weapon of The Chosen, Improved Weapon of the Chosen, Greater Weapon of the Chosen,
 - Planar Wild Shape,
@@ -49,7 +51,12 @@ New feats:
 - Distracting Charge,
 - Target of Opportunity,
 - Swarm Scatter,
-- Bonded Mind and Share Spell.
+- Bonded Mind and Share Spell,
+- Extended Bane,
+- Broken Wing Gambit,
+- Hurtful,
+- Dazing Assault,
+- Stunning Assault.
 
 New rage powers:
 - Terrifying Howl
@@ -79,9 +86,24 @@ New features:
 - Animal companions can now equip belts, bracers, capes and amulets,
 - Rerolls (due to Bit of Luck and similar abilities) are now shown in the battle log.
 
+The mod also adds following inquisitions that can be selected instead of domains:
+- Anger,
+- Conversion,
+- Heresy,
+- Imprisonment,
+- Persistence,
+- Tactics,
+- Valor.
+
+
+New Wild Talents:
+- Blade Rush,
+- Kinetic Whip,
+- Whip Hurricane.
+
 
 New spells:
-- Command,
+- Command and Command, Greater,
 - Chill Touch,
 - Frostbite,
 - Hex Vulnerability,
@@ -179,7 +201,10 @@ enchanced attacks (optional),
 - spell casting is not forbidden while in elemental form (optional),
 - allied spellcaster now should additionally give +1 cl and +2 spell penetration if adjacent with this feat teammates have the same spell available (optional)
 - changes range of Wail of Banshee and Polar Midnight to medium (since by the time you can cast these spells in pnp the range will be around 65 ft),
-- fixes ecclesitheurge to be as per pnp rules (no bonus skill point, no channel energy damage increase at level 3) (optional)
+- fixes ecclesitheurge to be as per pnp rules (no bonus skill point, no channel energy damage increase at level 3) (optional),
+- when using kinetic healer ability, burn cost can be optionally offloaded to the target,
+- Kinetic Knights now receive Blade Rush infusion at level 3, Kinetic Whip infusion at level 5, Whip Hurricane infusion at level 11 and Swift Blade Rush infusion at level 13 for free,
+- When using burn to improve water shroud ac bonus, kinetic knight increases enchantment bonus of his armor or shield instead of raw armor/shield bonuses.
 
 Original game bug fixes:
 - Vital Strike now takes standard action and extra damage dice are no longer multplied on critical hits,
@@ -189,7 +214,9 @@ Original game bug fixes:
 - Dragonkind I dragons bite and claw weapon are placed in main/off hand slots (so it can benefit from haste and feral combat training),
 - Web school is changed to conjuration
 - radius of teamwork feats that require "adjacent" allies changed to 5 feet (instead of 5 meters) (optional)
-- Invulnerable rager extreme endurance bonus no longer scales exponentially
+- Invulnerable rager extreme endurance bonus no longer scales exponentially,
+- Characters receive slam proficiency, that allows them to pick corresponding weapon focus and similar feats,
+- Fixes incorrect calculation of burn cost for kinetic blade and blade whirlwind abilities.
 
 Mod also changes stats of some npcs (optional)
 - Valerie class was changed to Vindictive Bastard and stats to 18/10/16/8/10/15

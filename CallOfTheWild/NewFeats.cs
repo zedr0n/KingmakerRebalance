@@ -3,6 +3,7 @@ using Kingmaker.Blueprints.Area;
 using Kingmaker.Blueprints.Classes;
 using Kingmaker.Blueprints.Classes.Prerequisites;
 using Kingmaker.Blueprints.Classes.Selection;
+using Kingmaker.Blueprints.Classes.Spells;
 using Kingmaker.Designers.EventConditionActionSystem.Actions;
 using Kingmaker.Designers.Mechanics.Buffs;
 using Kingmaker.Designers.Mechanics.Facts;
@@ -67,6 +68,16 @@ namespace CallOfTheWild
         static public BlueprintFeature coordinated_charge;
 
         static public BlueprintFeature spell_bane;
+        static public BlueprintFeature osyluth_guile;
+        static public BlueprintFeature artful_dodge;
+
+        static public BlueprintFeature hurtful;
+        static public BlueprintFeature broken_wing_gambit;
+        static public BlueprintFeature extended_bane;
+        //TODO:
+        static public BlueprintFeature dazing_assult;
+        static public BlueprintFeature stunning_assult;
+
 
         static internal void load()
         {
@@ -107,6 +118,321 @@ namespace CallOfTheWild
             //createCoordinatedCharge();
 
             createSpellBane();
+            createOsyluthGuile();
+            createArtfulDodge();
+
+            createHurtful();
+            createBrokenWingGambit();
+            createExtendedBane();
+
+            createDazingAssault();
+            createStunningAssault();
+        }
+
+
+        static void createDazingAssault()
+        {
+            var icon = LoadIcons.Image2Sprite.Create(@"FeatIcons/DazingAssault.png");
+            var dazed = library.Get<BlueprintBuff>("9934fedff1b14994ea90205d189c8759");
+
+            var apply = Common.createContextActionApplyBuff(dazed, Helpers.CreateContextDuration(1), dispellable: false);
+            var effect = Common.createContextActionSavingThrow(SavingThrowType.Fortitude,
+                                                               Helpers.CreateActionList(Helpers.CreateConditionalSaved(null, apply))
+                                                              );
+            var buff = Helpers.CreateBuff("DazingAssaultBuff",
+                                          "Dazing Assault",
+                                          "You can choose to take a –5 penalty on all melee attack rolls and combat maneuver checks to daze opponents you hit with your melee attacks for 1 round, in addition to the normal damage dealt by the attack. A successful Fortitude save negates the effect. The DC of this save is 10 + your base attack bonus. You must choose to use this feat before making the attack roll, and its effects last until your next turn.",
+                                          "",
+                                          icon,
+                                          null,
+                                          Common.createAttackTypeAttackBonus(-5, AttackTypeAttackBonus.WeaponRangeType.Melee, ModifierDescriptor.UntypedStackable),
+                                          Common.createAddInitiatorAttackWithWeaponTrigger(Helpers.CreateActionList(effect), check_weapon_range_type: true),
+                                          library.Get<BlueprintBuff>("f766db0dcd17aaa44b76181bdf85fee9").GetComponent<ContextCalculateAbilityParams>() //from staggering critical
+                                          //Helpers.Create<ContextCalculateAbilityParams>(c => { c.StatType = StatType.BaseAttackBonus; c.ReplaceCasterLevel = true; c.ReplaceSpellLevel = true; })
+                                          );
+
+            var ability = Helpers.CreateActivatableAbility("DazingAssaultToggleAbility",
+                                                           buff.Name,
+                                                           buff.Description,
+                                                           "",
+                                                           buff.Icon,
+                                                           buff,
+                                                           AbilityActivationType.Immediately,
+                                                           Kingmaker.UnitLogic.Commands.Base.UnitCommand.CommandType.Free,
+                                                           null);
+            ability.DeactivateImmediately = true;
+
+            dazing_assult = Common.ActivatableAbilityToFeature(ability, false);
+            dazing_assult.Groups = new FeatureGroup[] { FeatureGroup.CombatFeat, FeatureGroup.Feat };
+            dazing_assult.AddComponents(Helpers.PrerequisiteStatValue(StatType.Strength, 13),
+                                        Helpers.PrerequisiteStatValue(StatType.BaseAttackBonus, 11),
+                                        Helpers.PrerequisiteFeature(library.Get<BlueprintFeature>("9972f33f977fc724c838e59641b2fca5")) //power attack
+                                        );
+            library.AddCombatFeats(dazing_assult);
+        }
+
+
+        static void createStunningAssault()
+        {
+            var icon = LoadIcons.Image2Sprite.Create(@"FeatIcons/StunningAssault.png");
+            var stunned = library.Get<BlueprintBuff>("09d39b38bb7c6014394b6daced9bacd3");
+
+            var apply = Common.createContextActionApplyBuff(stunned, Helpers.CreateContextDuration(1), dispellable: false);
+            var effect = Common.createContextActionSavingThrow(SavingThrowType.Fortitude,
+                                                               Helpers.CreateActionList(Helpers.CreateConditionalSaved(null, apply))
+                                                              );
+            var buff = Helpers.CreateBuff("StunninAssaultBuff",
+                                          "Stunning Assault",
+                                          "You can choose to take a –5 penalty on all melee attack rolls and combat maneuver checks to stun targets you hit with your melee attacks for 1 round. A successful Fortitude save negates the effect. The DC of this save is 10 + your base attack bonus. You must choose to use this feat before making the attack roll, and its effects last until your next turn.",
+                                          "",
+                                          icon,
+                                          null,
+                                          Common.createAttackTypeAttackBonus(-5, AttackTypeAttackBonus.WeaponRangeType.Melee, ModifierDescriptor.UntypedStackable),
+                                          Common.createAddInitiatorAttackWithWeaponTrigger(Helpers.CreateActionList(effect), check_weapon_range_type: true),
+                                          library.Get<BlueprintBuff>("f766db0dcd17aaa44b76181bdf85fee9").GetComponent<ContextCalculateAbilityParams>() //from staggering critical
+                                          // Helpers.Create<ContextCalculateAbilityParams>(c => { c.StatType = StatType.BaseAttackBonus; c.ReplaceCasterLevel = true; c.ReplaceSpellLevel = true; })
+                                          );
+
+            var ability = Helpers.CreateActivatableAbility("StunningAssaultToggleAbility",
+                                                           buff.Name,
+                                                           buff.Description,
+                                                           "",
+                                                           buff.Icon,
+                                                           buff,
+                                                           AbilityActivationType.Immediately,
+                                                           Kingmaker.UnitLogic.Commands.Base.UnitCommand.CommandType.Free,
+                                                           null);
+            ability.DeactivateImmediately = true;
+
+            stunning_assult = Common.ActivatableAbilityToFeature(ability, false);
+            stunning_assult.Groups = new FeatureGroup[] { FeatureGroup.CombatFeat, FeatureGroup.Feat };
+            stunning_assult.AddComponents(Helpers.PrerequisiteStatValue(StatType.Strength, 13),
+                                        Helpers.PrerequisiteStatValue(StatType.BaseAttackBonus, 16),
+                                        Helpers.PrerequisiteFeature(library.Get<BlueprintFeature>("9972f33f977fc724c838e59641b2fca5")) //power attack
+                                        );
+            library.AddCombatFeats(stunning_assult);
+        }
+
+
+        static void createExtendedBane()
+        {
+            extended_bane = library.CopyAndAdd<BlueprintFeature>("756dc2f7340b0b34285a1dc367ff7359", "ExtendedBaneFeature", "");
+            extended_bane.SetNameDescription("Extended Bane", "Add your Wisdom bonus to the number of rounds per day that you can use your bane ability.");
+            var old_increase = extended_bane.GetComponent<IncreaseResourceAmount>();
+            extended_bane.ReplaceComponent(old_increase, Helpers.Create<NewMechanics.ContextIncreaseResourceAmount>(c => { c.Resource = old_increase.Resource; c.Value = Helpers.CreateContextValue(AbilityRankType.Default); }));
+            extended_bane.AddComponents(Helpers.CreateContextRankConfig(baseValueType: ContextRankBaseValueType.StatBonus, stat: StatType.Wisdom),
+                                        Helpers.Create<RecalculateOnStatChange>(r => r.Stat = StatType.Wisdom));
+
+            library.AddFeats(extended_bane);
+        }
+
+
+        static void createBrokenWingGambit()
+        {
+            var icon = LoadIcons.Image2Sprite.Create(@"FeatIcons/BrokenWingGambit.png");
+            broken_wing_gambit = Helpers.CreateFeature("BrokenWingGambitFeature",
+                                                       "Broken Wing Gambit",
+                                                       "Whenever you make a melee attack and hit your opponent, you can use a free action to grant that opponent a +2 bonus on attack and damage rolls against you until the end of your next turn or until your opponent attacks you, whichever happens first. If that opponent attacks you with this bonus, it provokes attacks of opportunity from your allies who have this feat.",
+                                                       "",
+                                                       icon,
+                                                       FeatureGroup.Feat,
+                                                       Helpers.PrerequisiteStatValue(StatType.SkillPersuasion, 5)
+                                                       );
+
+            var broken_wing_gambit_effect_buff = Helpers.CreateBuff("BrokenWingEffectGambitBuff",
+                                                              broken_wing_gambit.Name,
+                                                              broken_wing_gambit.Description,
+                                                              "",
+                                                              broken_wing_gambit.Icon,
+                                                              null,
+                                                              Helpers.Create<AttackBonusAgainstCaster>(a => a.Value = 2),
+                                                              Helpers.Create<NewMechanics.DamageBonusAgainstCaster>(d => d.Value = 2)
+                                                              );
+            var apply_buff = Common.createContextActionApplyBuff(broken_wing_gambit_effect_buff, Helpers.CreateContextDuration(1), dispellable: false);
+            var broken_wing_gambit_buff = Helpers.CreateBuff("BrokenWingGambitBuff",
+                                                              broken_wing_gambit.Name,
+                                                              broken_wing_gambit.Description,
+                                                              "",
+                                                              broken_wing_gambit.Icon,
+                                                              null,
+                                                              Common.createAddInitiatorAttackWithWeaponTrigger(Helpers.CreateActionList(apply_buff), check_weapon_range_type: true)
+                                                              );
+            broken_wing_gambit_buff.SetBuffFlags(BuffFlags.HiddenInUi);
+
+            var broken_wing_ability = Helpers.CreateActivatableAbility("BrokenWingGambitToggleAbility",
+                                                                       broken_wing_gambit.Name,
+                                                                       broken_wing_gambit.Description,
+                                                                       "",
+                                                                       broken_wing_gambit.Icon,
+                                                                       broken_wing_gambit_buff,
+                                                                       AbilityActivationType.Immediately,
+                                                                       Kingmaker.UnitLogic.Commands.Base.UnitCommand.CommandType.Free,
+                                                                       null);
+            broken_wing_ability.DeactivateImmediately = true;
+
+            var on_attack = Helpers.CreateConditional(Common.createContextConditionHasFact(broken_wing_gambit_effect_buff),
+                                                      Helpers.Create<TeamworkMechanics.ProvokeAttackFromFactOwners>(p => p.fact = broken_wing_gambit)
+                                                      );
+            broken_wing_gambit.AddComponents(Helpers.CreateAddFact(broken_wing_ability),
+                                             Common.createAddTargetAttackWithWeaponTrigger(null,
+                                                                                           Helpers.CreateActionList(on_attack),
+                                                                                           wait_for_attack_to_resolve: true)
+                                            );
+
+            broken_wing_gambit.Groups = broken_wing_gambit.Groups.AddToArray(FeatureGroup.CombatFeat, FeatureGroup.TeamworkFeat);
+
+            library.AddCombatFeats(broken_wing_gambit);
+            Common.addTemworkFeats(broken_wing_gambit);
+        }
+
+
+        static void createHurtful()
+        {
+            var shaken = library.Get<BlueprintBuff>("25ec6cb6ab1845c48a95f9c20b034220");
+            var frightened = library.Get<BlueprintBuff>("f08a7239aa961f34c8301518e71d4cdf");
+            var icon = LoadIcons.Image2Sprite.Create(@"FeatIcons/Hurtful.png");
+            hurtful = Helpers.CreateFeature("HurtfulFeature",
+                                            "Hurtful",
+                                            "When you successfully demoralize an opponent within your melee reach with an Intimidate check, you can make a single melee attack against that creature as a swift action. If your attack fails to damage the target, its shaken condition from being demoralized immediately ends.",
+                                            "",
+                                            icon,
+                                            FeatureGroup.Feat,
+                                            Helpers.PrerequisiteStatValue(StatType.Strength, 13),
+                                            Helpers.PrerequisiteFeature(library.Get<BlueprintFeature>("9972f33f977fc724c838e59641b2fca5")) //power attack
+                                            );
+
+            var hurtful_buff = Helpers.CreateBuff("HurtfulBuff",
+                                                  hurtful.Name,
+                                                  hurtful.Description,
+                                                  "",
+                                                  hurtful.Icon,
+                                                  null,
+                                                  shaken.GetComponent<SpellDescriptorComponent>());
+            
+            var hurtful_ability = Helpers.CreateAbility("HurtfulAbility",
+                                                        hurtful.Name,
+                                                        hurtful.Description,
+                                                        "",
+                                                        hurtful.Icon,
+                                                        AbilityType.Special,
+                                                        Kingmaker.UnitLogic.Commands.Base.UnitCommand.CommandType.Swift,
+                                                        AbilityRange.Weapon,
+                                                        "",
+                                                        "",
+                                                        Helpers.CreateRunActions(Common.createContextActionAttack(Helpers.CreateActionList(Common.createContextActionRemoveBuffFromCaster(hurtful_buff)),
+                                                                                                                  Helpers.CreateActionList(Common.createContextActionRemoveBuffFromCaster(shaken),
+                                                                                                                                           Common.createContextActionRemoveBuffFromCaster(frightened),
+                                                                                                                                           Common.createContextActionRemoveBuffFromCaster(hurtful_buff))
+                                                                                                                  )
+                                                                                                                  ),
+                                                        Helpers.Create<NewMechanics.AttackAnimation>(),
+                                                        Helpers.Create<NewMechanics.AbilityTargetHasBuffFromCaster>(a => a.Buffs = new BlueprintBuff[] { hurtful_buff })
+                                                        );
+            hurtful_ability.setMiscAbilityParametersTouchHarmful();
+
+            hurtful.AddComponent(Helpers.CreateAddFact(hurtful_ability));
+
+            var action = Helpers.CreateConditional(new Condition[] { Common.createContextConditionCasterHasFact(hurtful), Helpers.Create<NewMechanics.ContextConditionEngagedByCaster>() },
+                                                   Common.createContextActionApplyBuff(hurtful_buff, Helpers.CreateContextDuration(), dispellable: false, duration_seconds: 3));
+            var displays = new ActionList[]{ library.Get<BlueprintAbility>("5f3126d4120b2b244a95cb2ec23d69fb").GetComponent<AbilityEffectRunAction>().Actions,
+                                                   library.Get<BlueprintAbility>("7d2233c3b7a0b984ba058a83b736e6ac").GetComponent<AbilityEffectRunAction>().Actions,
+                                                   (library.Get<BlueprintFeature>("ceea53555d83f2547ae5fc47e0399e14").GetComponent<AddInitiatorAttackWithWeaponTrigger>().Action.Actions[0] as Conditional).IfTrue ,
+                                                 };
+            //no need to fix dreadful carnage since it uses dazzling display
+            foreach (var display in displays)
+            {
+                var demoralize = (display.Actions[0] as Demoralize);
+
+                var new_demoralize = Helpers.Create<NewMechanics.DemoralizeWithAction>(d =>
+                {
+                    d.ShatterConfidenceBuff = demoralize.ShatterConfidenceBuff;
+                    d.ShatterConfidenceFeature = demoralize.ShatterConfidenceFeature;
+                    d.SwordlordProwessFeature = demoralize.SwordlordProwessFeature;
+                    d.DazzlingDisplay = demoralize.DazzlingDisplay;
+                    d.Buff = demoralize.Buff;
+                    d.GreaterBuff = demoralize.GreaterBuff;
+                    d.actions = Helpers.CreateActionList(action);
+                });
+
+                display.Actions[0] = new_demoralize;
+            }
+
+            var blistering_demoralize = NewSpells.blistering_invective.GetComponent<AbilityEffectRunAction>().Actions.Actions[0] as NewMechanics.ActionOnDemoralize;
+            blistering_demoralize.actions = Helpers.CreateActionList(action, blistering_demoralize.actions.Actions[0]);
+            hurtful.Groups = hurtful.Groups.AddToArray(FeatureGroup.CombatFeat);
+            library.AddCombatFeats(hurtful);
+        }
+
+
+        static void createArtfulDodge()
+        {
+            var icon = LoadIcons.Image2Sprite.Create(@"FeatIcons/ArtfulDodge.png");
+            artful_dodge = Helpers.CreateFeature("ArtfulDodgeFeature",
+                                                 "Artful Dodge",
+                                                 "If you are the only character threatening an opponent, you gain a +1 dodge bonus to AC against that opponent.\n"
+                                                 + "Special: The Artful Dodge feat acts as the Dodge feat for the purpose of satisfying prerequisites that require Dodge.\n"
+                                                 + "You can use Intelligence, rather than Dexterity, for feats with a minimum Dexterity prerequisite.",
+                                                 "",
+                                                 icon,
+                                                 FeatureGroup.Feat,
+                                                 Helpers.Create<ReplaceStatForPrerequisites>(r => { r.OldStat = StatType.Dexterity; r.NewStat = StatType.Intelligence; r.Policy = ReplaceStatForPrerequisites.StatReplacementPolicy.NewStat; }),
+                                                 Helpers.Create<NewMechanics.ACBonusSingleThreat>(a => { a.Bonus = 1; a.Descriptor = ModifierDescriptor.Dodge; }),
+                                                 Helpers.PrerequisiteStatValue(StatType.Intelligence, 13)
+                                                 );
+
+            library.Get<BlueprintFeature>("97e216dbb46ae3c4faef90cf6bbe6fd5").AddComponent(Helpers.Create<NewMechanics.FeatureReplacement>(f => f.replacement_feature = artful_dodge)); //dodge
+            artful_dodge.Groups = artful_dodge.Groups.AddToArray(FeatureGroup.CombatFeat);
+            library.AddCombatFeats(artful_dodge);
+        }
+
+
+        static void createOsyluthGuile()
+        {
+            var icon = LoadIcons.Image2Sprite.Create(@"FeatIcons/OsyluthGuile.png");
+            var buff = Helpers.CreateBuff("OsyluthGuileBuff",
+                                          "Osyluth Guile",
+                                          "While you are fighting defensively or using the total defense action, select one opponent. Add your Charisma bonus to your AC as a dodge bonus against that opponent’s melee attacks until your next turn. You cannot use this feat if you cannot see the selected opponent.",
+                                          "",
+                                          icon,
+                                          null,
+                                          Helpers.Create<NewMechanics.ACBonusAgainstTargetIfHasFact>(a =>
+                                                                                                      {
+                                                                                                          a.CheckCaster = true;
+                                                                                                          a.checked_fact = library.Get<BlueprintBuff>("6ffd93355fb3bcf4592a5d976b1d32a9"); //fight defensively
+                                                                                                          a.Descriptor = ModifierDescriptor.Dodge;
+                                                                                                          a.Value = Helpers.CreateContextValue(AbilityRankType.Default);
+                                                                                                          a.only_melee = true;
+                                                                                                      }
+                                                                                                     ),
+                                          Helpers.CreateContextRankConfig(baseValueType: ContextRankBaseValueType.StatBonus, stat: StatType.Charisma, min: 0),
+                                          Helpers.Create<UniqueBuff>()
+                                          );
+            var apply_buff = Common.createContextActionApplyBuff(buff, Helpers.CreateContextDuration(), dispellable: false, is_permanent: true);
+
+            var ability = Helpers.CreateAbility("OsyluthGuileAbility",
+                                                buff.Name,
+                                                buff.Description,
+                                                "",
+                                                buff.Icon,
+                                                AbilityType.Special,
+                                                Kingmaker.UnitLogic.Commands.Base.UnitCommand.CommandType.Free,
+                                                AbilityRange.Long,
+                                                "",
+                                                "",
+                                                Helpers.CreateRunActions(apply_buff)
+                                                );
+            ability.setMiscAbilityParametersSingleTargetRangedHarmful(true);
+
+            osyluth_guile = Common.AbilityToFeature(ability, false);
+            osyluth_guile.AddComponents(Helpers.PrerequisiteStatValue(StatType.SkillPersuasion, 8),
+                                        Helpers.PrerequisiteFeature(library.Get<BlueprintFeature>("97e216dbb46ae3c4faef90cf6bbe6fd5"))//dodge
+                                        );
+            osyluth_guile.Groups = new FeatureGroup[] { FeatureGroup.Feat, FeatureGroup.CombatFeat };
+            library.AddCombatFeats(osyluth_guile);
+
+
+
+
         }
 
         static void createSpellBane()
@@ -121,7 +447,8 @@ namespace CallOfTheWild
                                                Helpers.PrerequisiteFeature(library.Get<BlueprintFeature>("7ddf7fbeecbe78342b83171d888028cf"))//bane
                                                );
 
-            var buffs = new BlueprintBuff[] { library.Get<BlueprintBuff>("be190d2dd5433dd41a4aa00e1abc9a5b"), library.Get<BlueprintBuff>("60dffde0dd392a84b8c26dc37c471cd1") };
+            var buffs = new BlueprintBuff[] { library.Get<BlueprintBuff>("be190d2dd5433dd41a4aa00e1abc9a5b"), //bane
+                                              library.Get<BlueprintBuff>("60dffde0dd392a84b8c26dc37c471cd1") }; //greater bane
 
             var spell_bane_buff = Helpers.CreateBuff("SpellBaneBuff",
                                                      "",
@@ -154,7 +481,7 @@ namespace CallOfTheWild
 
         static void createSwarmTactics()
         {
-            var icon = LoadIcons.Image2Sprite.Create(@"AbilityIcons/SwarmScatter.png");
+            var icon = LoadIcons.Image2Sprite.Create(@"FeatIcons/SwarmScatter.png");
 
             var area = library.CopyAndAdd<BlueprintAbilityAreaEffect>("7ced0efa297bd5142ab749f6e33b112b", "AuraSwarmScatterArea", "");
             area.Size = 7.Feet();
@@ -196,7 +523,7 @@ namespace CallOfTheWild
 
         static void createTargetOfOpportunity()
         {
-            var icon = LoadIcons.Image2Sprite.Create(@"AbilityIcons/TargetOfOpportunity.png");
+            var icon = LoadIcons.Image2Sprite.Create(@"FeatIcons/TargetOfOpportunity.png");
 
             var area = library.CopyAndAdd<BlueprintAbilityAreaEffect>("7ced0efa297bd5142ab749f6e33b112b", "AuraTargetOfOpportunityArea", "");
 
@@ -286,7 +613,7 @@ namespace CallOfTheWild
 
         static void createDistractingCharge()
         {
-            var icon = LoadIcons.Image2Sprite.Create(@"AbilityIcons/DistractingCharge.png");
+            var icon = LoadIcons.Image2Sprite.Create(@"FeatIcons/DistractingCharge.png");
             var area = library.CopyAndAdd<BlueprintAbilityAreaEffect>("7ced0efa297bd5142ab749f6e33b112b", "AuraDistractingChargeArea", "");
 
             area.Size = 100.Feet();

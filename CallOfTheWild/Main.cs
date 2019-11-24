@@ -170,7 +170,9 @@ namespace CallOfTheWild
                     CallOfTheWild.Rebalance.fixSpellDescriptors();
                     CallOfTheWild.Rebalance.fixSpellRanges();
                     CallOfTheWild.Rebalance.fixJudgments();
+                    CallOfTheWild.Rebalance.fixMissingSlamProficiency();
                     
+
                     //CallOfTheWild.Rebalance.fixNaturalACStacking();
 
                     CallOfTheWild.ChannelEnergyEngine.init();
@@ -186,6 +188,8 @@ namespace CallOfTheWild
                     CallOfTheWild.NewRagePowers.load();
                     CallOfTheWild.NewSpells.load();
                     CallOfTheWild.NewFeats.createDeityFavoredWeapon();
+
+                    
 
                     bool inquisitions_test = false;
 #if DEBUG
@@ -222,6 +226,8 @@ namespace CallOfTheWild
                     CallOfTheWild.Hinterlander.createHinterlanderClass();
                     CallOfTheWild.HolyVindicator.createHolyVindicatorClass();
 
+                    CallOfTheWild.KineticistFix.load();
+
                     CallOfTheWild.CleanUp.processRage();
                     CallOfTheWild.SaveGameFix.FixMissingAssets();
 
@@ -232,6 +238,7 @@ namespace CallOfTheWild
                         CallOfTheWild.Rebalance.fixCompanions();
                     }
 
+                    //CallOfTheWild.FavoredClass.FavoredClassBonus.load();
 
 #if DEBUG
                     string guid_file_name = @"G:\dev\KingmakerRebalance\CallOfTheWild\blueprints.txt";

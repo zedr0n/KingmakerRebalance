@@ -1578,11 +1578,19 @@ namespace CallOfTheWild
         //and restore it in prefix
         [Harmony12.HarmonyPatch(typeof(AbilityData))]
         [Harmony12.HarmonyPatch("GetAvailableForCastCount", Harmony12.MethodType.Normal)]
-        class AbilityData__GetAvailableCostCount__Patch
+        class AbilityData__GetAvailableForCastCount__Patch
         {
             static bool Prefix(AbilityData __instance, ref bool __state, ref int __result)
             {
                 __state = false;
+
+                if (__instance.StickyTouch != null)
+                {
+                    var num_charges = __instance.Caster.Get<StickyTouchMechnics.UnitPartTouchMultipleCharges>();
+                    __result =  num_charges == null ? 1 : num_charges.getNumCharges();
+                    return false;
+                }
+
                 if (__instance.Fact != null)
                 {
                     AbilityResourceLogic abilityResourceLogic = __instance.Fact.Blueprint.GetComponents<AbilityResourceLogic>().FirstOrDefault<AbilityResourceLogic>();
@@ -2197,6 +2205,55 @@ namespace CallOfTheWild
         }
 
 
+        [AllowedOn(typeof(BlueprintUnitFact))]
+        public class ACBonusIfHasFacts : OwnedGameLogicComponent<UnitDescriptor>, ITargetRulebookHandler<RuleAttackRoll>, IRulebookHandler<RuleAttackRoll>, ITargetRulebookSubscriber
+        {
+            public BlueprintUnitFact[] CheckedFacts;
+            public bool all = false;
+            public ContextValue Bonus;
+            public ModifierDescriptor Descriptor;
+
+            public void OnEventAboutToTrigger(RuleAttackRoll evt)
+            {
+                bool is_ok = true;
+                if (!CheckedFacts.Empty())
+                {
+                    is_ok = all;
+                    foreach (var f in CheckedFacts)
+                    {
+                        if (evt.Target.Descriptor.HasFact(f))
+                        {
+                            if (!all)
+                            {
+                                is_ok = true;
+                                break;
+                            }
+                        }
+                        else if (all)
+                        {
+
+                            is_ok = false;
+                            break;
+                        }
+                    }
+                }
+
+                if (!is_ok)
+                {
+                    return;
+                }
+
+                int bonus = this.Bonus.Calculate(this.Fact.MaybeContext);
+
+
+                evt.AddTemporaryModifier(evt.Target.Stats.AC.AddModifier(bonus, (GameLogicComponent)this, this.Descriptor));
+            }
+
+            public void OnEventDidTrigger(RuleAttackRoll evt)
+            {
+            }
+        }
+
 
         [AllowMultipleComponents]
         [AllowedOn(typeof(BlueprintUnitFact))]
@@ -2226,7 +2283,7 @@ namespace CallOfTheWild
                 {
                     return;
                 }
-                if (evt.Weapon == null || !evt.Initiator.Descriptor.HasFact(this.CheckedFact)
+                if (evt.Weapon == null || (CheckedFact != null && !evt.Initiator.Descriptor.HasFact(this.CheckedFact))
                     || (!evt.Weapon.HoldInTwoHands && OnlyTwoHanded)
                     || (!evt.RuleAttackWithWeapon.IsFirstAttack && OnlyFirstAttack)
                     || !WeaponAttackTypes.Contains(evt.AttackType))
@@ -2540,9 +2597,13 @@ namespace CallOfTheWild
                 {
                     return;
                 }
-                evt.DoNotScaleDamage = true;
-                DiceFormula baseDice = !evt.WeaponDamageDiceOverride.HasValue ? evt.Weapon.Blueprint.BaseDamage : evt.WeaponDamageDiceOverride.Value;
                 var wielder_size = evt.Initiator.Descriptor.State.Size;
+                evt.DoNotScaleDamage = true;
+
+                //scale weapon to the wielder size if need (note polymophs do not change their size, so their weapon dice is not supposed to scale)
+                var base_weapon_dice = evt.Initiator.Body.IsPolymorphed ? evt.Weapon.Blueprint.Damage : evt.Weapon.Blueprint.ScaleDamage(wielder_size);
+                DiceFormula baseDice = !evt.WeaponDamageDiceOverride.HasValue ? base_weapon_dice : evt.WeaponDamageDiceOverride.Value;
+                
 
                 if (wielder_size == Size.Colossal || wielder_size == Size.Gargantuan)
                 {
@@ -2552,7 +2613,7 @@ namespace CallOfTheWild
                 }
                 else
                 {
-                    evt.WeaponDamageDiceOverride = new DiceFormula?(WeaponDamageScaleTable.Scale(baseDice, wielder_size + 2, Size.Medium, evt.Weapon.Blueprint));
+                    evt.WeaponDamageDiceOverride = new DiceFormula?(WeaponDamageScaleTable.Scale(baseDice, wielder_size + 2, wielder_size, evt.Weapon.Blueprint));
                 }
             }
 
@@ -2832,6 +2893,29 @@ namespace CallOfTheWild
                 }
 
                 return weapon_types.Contains(weapon.Blueprint.Type);
+            }
+        }
+
+
+        public class ActivatableAbilityMainWeaponCategoryAllowed : ActivatableAbilityRestriction
+        {
+            public WeaponCategory[] categories;
+
+            public override bool IsAvailable()
+            {
+
+                if (categories == null || categories.Empty())
+                {
+                    return true;
+                }
+
+                var weapon = Owner.Body.PrimaryHand.HasWeapon ? Owner.Body.PrimaryHand.MaybeWeapon : Owner.Body.EmptyHandWeapon;
+                if (weapon == null)
+                {
+                    return false;
+                }
+
+                return categories.Contains(weapon.Blueprint.Category);
             }
         }
 
@@ -4041,6 +4125,80 @@ namespace CallOfTheWild
 
 
 
+        public class DemoralizeWithAction : ContextAction
+        {
+            public BlueprintBuff Buff;
+            public BlueprintBuff GreaterBuff;
+            public bool DazzlingDisplay;
+            public BlueprintFeature SwordlordProwessFeature;
+            public BlueprintFeature ShatterConfidenceFeature;
+            public BlueprintBuff ShatterConfidenceBuff;
+            public ActionList actions;
+
+            public override string GetCaption()
+            {
+                return "Demoralize target";
+            }
+
+            public override void RunAction()
+            {
+                MechanicsContext context = ElementsContext.GetData<MechanicsContext.Data>()?.Context;
+                UnitEntityData maybeCaster = context?.MaybeCaster;
+                if (maybeCaster == null || !this.Target.IsUnit)
+                {
+                    UberDebug.LogError((UnityEngine.Object)this, (object)"Unable to apply buff: no context found", (object[])Array.Empty<object>());
+                }
+                else
+                {
+                    int dc = 10 + this.Target.Unit.Descriptor.Progression.CharacterLevel + this.Target.Unit.Stats.Wisdom.Bonus;
+                    ModifiableValue.Modifier modifier = (ModifiableValue.Modifier)null;
+                    try
+                    {
+                        if (this.DazzlingDisplay && (bool)maybeCaster.Descriptor.State.Features.SwordlordWeaponProwess)
+                        {
+                            int num = 0;
+                            foreach (Feature feature in maybeCaster.Descriptor.Progression.Features)
+                            {
+                                FeatureParam featureParam = feature.Param;
+                                WeaponCategory? nullable1;
+                                WeaponCategory? nullable2;
+                                if ((object)featureParam == null)
+                                {
+                                    nullable1 = new WeaponCategory?();
+                                    nullable2 = nullable1;
+                                }
+                                else
+                                    nullable2 = featureParam.WeaponCategory;
+                                nullable1 = nullable2;
+                                if ((nullable1.GetValueOrDefault() != WeaponCategory.DuelingSword ? 0 : (nullable1.HasValue ? 1 : 0)) != 0)
+                                    ++num;
+                            }
+                            modifier = maybeCaster.Stats.CheckIntimidate.AddModifier(num, (GameLogicComponent)null, ModifierDescriptor.None);
+                        }
+                        RuleSkillCheck ruleSkillCheck = context.TriggerRule<RuleSkillCheck>(new RuleSkillCheck(maybeCaster, StatType.CheckIntimidate, dc));
+                        if (!ruleSkillCheck.IsPassed)
+                            return;
+                        if (this.actions != null)
+                        {
+                            this.actions.Run();
+                        }
+                        int num1 = 1 + (ruleSkillCheck.RollResult - dc) / 5 + (!(bool)maybeCaster.Descriptor.State.Features.FrighteningThug ? 0 : 1);
+                        if ((bool)maybeCaster.Descriptor.State.Features.FrighteningThug && num1 >= 4)
+                            this.Target.Unit.Descriptor.AddBuff(this.GreaterBuff, context, new TimeSpan?(1.Rounds().Seconds));
+                        Kingmaker.UnitLogic.Buffs.Buff buff1 = this.Target.Unit.Descriptor.AddBuff(this.Buff, context, new TimeSpan?(num1.Rounds().Seconds));
+                        if (this.ShatterConfidenceFeature!= null && !maybeCaster.Descriptor.HasFact(this.ShatterConfidenceFeature) || buff1 == null)
+                            return;
+                        Kingmaker.UnitLogic.Buffs.Buff buff2 = this.Target.Unit.Descriptor.AddBuff(this.ShatterConfidenceBuff, context, new TimeSpan?(num1.Rounds().Seconds));
+                        buff1.StoreFact((Fact)buff2);
+                    }
+                    finally
+                    {
+                        modifier?.Remove();
+                    }
+                }
+            }
+        }
+
         public class ActionOnDemoralize : ContextAction
         {
             public BlueprintBuff Buff;
@@ -4504,6 +4662,224 @@ namespace CallOfTheWild
         }
 
 
+        [AllowedOn(typeof(BlueprintUnitFact))]
+        [AllowMultipleComponents]
+        public class ActionOnNearMissIfHasFact : RuleTargetLogicComponent<RuleAttackWithWeapon>
+        {
+            [HideIf("RangedOnly")]
+            public bool MeleeOnly;
+            [HideIf("MeleeOnly")]
+            public bool RangedOnly;
+            public int HitAndArmorDifference;
+            public ActionList Action;
+            public bool OnAttacker;
+            public BlueprintUnitFact checked_fact;
 
+            public override void OnEventAboutToTrigger(RuleAttackWithWeapon evt)
+            {
+            }
+
+            public override void OnEventDidTrigger(RuleAttackWithWeapon evt)
+            {
+                if (!this.Check(evt) || evt.AttackRoll.IsHit || (checked_fact != null && !evt.Target.Descriptor.HasFact(checked_fact)))
+                    return;
+                //UberDebug.LogError((object)("MISS BY: " + (object)evt.AttackRoll.TargetAC + " " + (object)evt.AttackRoll.Roll + " " + (object)evt.AttackRoll.AttackBonus), (object[])Array.Empty<object>());
+                if (evt.AttackRoll.TargetAC - evt.AttackRoll.Roll - evt.AttackRoll.AttackBonus > this.HitAndArmorDifference)
+                    return;
+
+                (this.Fact as IFactContextOwner)?.RunActionInContext(this.Action, (TargetWrapper)(!this.OnAttacker ? evt.Target : evt.Initiator));
+            }
+
+            private bool Check(RuleAttackWithWeapon evt)
+            {
+                return (!this.MeleeOnly || evt.Weapon.Blueprint.IsMelee) && (!this.RangedOnly || evt.Weapon.Blueprint.IsRanged);
+            }
+        }
+
+
+        [AllowedOn(typeof(BlueprintBuff))]
+        public class ACBonusAgainstTargetIfHasFact : BuffLogic, IInitiatorRulebookHandler<RuleAttackRoll>, IRulebookHandler<RuleAttackRoll>, IInitiatorRulebookSubscriber
+        {
+            public ContextValue Value;
+            public bool CheckCaster;
+            public bool CheckCasterFriend;
+            public ModifierDescriptor Descriptor;
+            public BlueprintUnitFact checked_fact;
+            public bool only_melee = false;
+
+            public void OnEventAboutToTrigger(RuleAttackRoll evt)
+            {
+                UnitEntityData maybeCaster = this.Buff.Context.MaybeCaster;
+                bool flag1 = this.CheckCaster && evt.Target == maybeCaster;
+                bool flag2 = this.CheckCasterFriend && maybeCaster != null && evt.Target.GroupId == maybeCaster.GroupId && evt.Target != maybeCaster;
+                if (!flag1 && !flag2)
+                    return;
+                if (!evt.Target.Descriptor.HasFact(checked_fact))
+                {
+                    return;
+                }
+                if (!evt.Weapon.Blueprint.IsMelee && only_melee)
+                {
+                    return;
+                }
+                evt.AddTemporaryModifier(evt.Target.Stats.AC.AddModifier(this.Value.Calculate(this.Buff.Context), (GameLogicComponent)this, this.Descriptor));
+            }
+
+            public void OnEventDidTrigger(RuleAttackRoll evt)
+            {
+            }
+
+            public override void Validate(ValidationContext context)
+            {
+                base.Validate(context);
+                if (this.CheckCaster || this.CheckCasterFriend)
+                    return;
+                context.AddError("CheckCaster or CheckCasterFriend must be true", (object[])Array.Empty<object>());
+            }
+        }
+
+
+        [AllowMultipleComponents]
+        [AllowedOn(typeof(BlueprintUnitFact))]
+        public class ACBonusSingleThreat : OwnedGameLogicComponent<UnitDescriptor>, ITargetRulebookHandler<RuleAttackRoll>, IRulebookHandler<RuleAttackRoll>, ITargetRulebookSubscriber
+        {
+            public int Bonus;
+            public ModifierDescriptor Descriptor;
+
+            public void OnEventAboutToTrigger(RuleAttackRoll evt)
+            {
+                if (evt.Target.IsEngage(evt.Initiator) && evt.Initiator.CombatState.EngagedBy.Count == 1)
+                {
+                    evt.AddTemporaryModifier(evt.Target.Stats.AC.AddModifier(this.Bonus * this.Fact.GetRank(), (GameLogicComponent)this, this.Descriptor));
+                }
+            }
+
+            public void OnEventDidTrigger(RuleAttackRoll evt)
+            {
+            }
+        }
+
+
+        [AllowMultipleComponents]
+        [AllowedOn(typeof(BlueprintUnitFact))]
+        public class FeatureReplacement : BlueprintComponent
+        {
+            public BlueprintFact replacement_feature;
+        }
+
+
+        [Harmony12.HarmonyPatch(typeof(FactCollection))]
+        [Harmony12.HarmonyPatch("HasFact", Harmony12.MethodType.Normal)]
+        [Harmony12.HarmonyPatch(new Type[] { typeof(BlueprintFact)})]
+        class FactCollection__HasFact__Patch
+        {
+
+            static void Postfix(FactCollection __instance, ref bool __result, BlueprintFact blueprint)
+            {
+                if (!__result)
+                {
+                    foreach (var c in blueprint.GetComponents<FeatureReplacement>())
+                    {
+                        if (__instance.GetFact(c.replacement_feature) != null)
+                        {
+                            __result = true;
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
+
+        [AllowedOn(typeof(BlueprintAbility))]
+        public class AbilityShowIfCasterHasFact : BlueprintComponent, IAbilityVisibilityProvider
+        {
+            public BlueprintUnitFact UnitFact;
+
+            public bool IsAbilityVisible(AbilityData ability)
+            {
+                return ability.Caster.Progression.Features.HasFact((BlueprintFact)this.UnitFact) || ability.Caster.Buffs.HasFact(UnitFact);
+            }
+        }
+
+        public class ContextConditionEngagedByCaster : ContextCondition
+        {
+            protected override string GetConditionCaption()
+            {
+                return string.Empty;
+            }
+
+            protected override bool CheckCondition()
+            {
+                var target = this.Target?.Unit;
+                var caster = this.Context.MaybeCaster;
+
+                if (target == null || caster == null)
+                {
+                    return false;
+                }
+                
+                return caster.IsEngage(target);
+            }
+        }
+
+
+        [AllowedOn(typeof(BlueprintBuff))]
+        public class DamageBonusAgainstCaster : BuffLogic, IInitiatorRulebookHandler<RuleCalculateDamage>, IRulebookHandler<RuleCalculateDamage>, IInitiatorRulebookSubscriber
+        {
+            public ContextValue Value;
+            public bool ApplyToSpellDamage = false;
+
+            public void OnEventAboutToTrigger(RuleCalculateDamage evt)
+            {
+                UnitEntityData maybeCaster = this.Buff.Context.MaybeCaster;
+                if (evt.Target != maybeCaster)
+                    return;
+                if (!this.ApplyToSpellDamage && evt.DamageBundle.Weapon == null)
+                    return;
+
+                evt.DamageBundle.First?.AddBonusTargetRelated(this.Value.Calculate(this.Buff.Context));
+            }
+
+            public void OnEventDidTrigger(RuleCalculateDamage evt)
+            {
+            }
+        }
+
+
+        [AllowMultipleComponents]
+        public class ContextIncreaseResourceAmount : OwnedGameLogicComponent<UnitDescriptor>, IResourceAmountBonusHandler, IUnitSubscriber
+        {
+            public ContextValue Value;
+            public BlueprintAbilityResource Resource;
+
+            public void CalculateMaxResourceAmount(BlueprintAbilityResource resource, ref int bonus)
+            {
+                if (!this.Fact.Active || (resource != this.Resource))
+                    return;
+                bonus += this.Value.Calculate(this.Fact.MaybeContext);
+            }
+        }
+
+
+        public class ContextConditionHasArchetype : ContextCondition
+        {
+            public BlueprintArchetype archetype;
+            protected override string GetConditionCaption()
+            {
+                return string.Empty;
+            }
+
+            protected override bool CheckCondition()
+            {
+                var target = this.Target?.Unit;
+
+                if (target == null)
+                {
+                    return false;
+                }
+                return target.Descriptor.Progression.IsArchetype(archetype);
+            }
+        }
     }
 }
