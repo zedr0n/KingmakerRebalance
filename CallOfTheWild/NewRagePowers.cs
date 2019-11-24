@@ -957,10 +957,6 @@ namespace CallOfTheWild
         {
             if (__result == false && __instance.Target.Descriptor.Buffs.HasFact(NewRagePowers.superstition_buff))
             {
-                // only apply the spell resistance for allies
-                // if (__instance.Context.MaybeCaster == null || __instance.Context.MaybeCaster.IsPlayersEnemy)
-                //    return;
-
                 // check if the spell has an explicit saving throw then don't use spell resistance
                 if (__instance.Ability != null && __instance.Ability.HasThrow(__instance.Target))
                 {
@@ -994,7 +990,7 @@ namespace CallOfTheWild
                 // Common.AddBattleLogMessage("Save failed on healing, applying healing debuff");
                 
                 if (!__instance.Target.Buffs.HasFact(NewRagePowers.healing_debuff))
-                    __instance.Target.Buffs.AddBuff(NewRagePowers.healing_debuff, __instance.Target, TimeSpan.FromSeconds(1));
+                    __instance.Target.Buffs.AddBuff(NewRagePowers.healing_debuff, __instance.Target, TimeSpan.FromSeconds(0.5));
             }
         }
     }
@@ -1007,12 +1003,7 @@ namespace CallOfTheWild
         {
             if (!__instance.Target.Descriptor.Buffs.HasFact(NewRagePowers.superstition_buff))
                 return;
-
-            var caster = __instance.Reason.Caster;
-            // only apply the spell resistance for allies
-            // if (caster == null || caster.IsPlayersEnemy)
-            //    return;
-
+            
             if (__instance.Ability == null)
                 return;
             
@@ -1039,12 +1030,6 @@ namespace CallOfTheWild
                 (20, 30)
             };
             
-            /*var forcedSR = new (int, int)[]
-            {
-                (0, 0),
-                (3, 20)
-            };*/
-
             // var bonus = progression.Last(p => p.Item1 < brbLevel).Item2;
             var bonus = progression.Last(p => p.Item1 < brbLevel).Item2;
             __result += bonus;
