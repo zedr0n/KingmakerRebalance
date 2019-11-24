@@ -54,6 +54,7 @@ namespace CallOfTheWild
         static public BlueprintBuff sanctuary_buff;
 
         static public BlueprintAbility command;
+        static public BlueprintAbility command_greater;
         static public BlueprintAbility fire_shield;
         static public Dictionary<DamageEnergyType, BlueprintBuff> fire_shield_buffs = new Dictionary<DamageEnergyType, BlueprintBuff>();
         static public Dictionary<DamageEnergyType, BlueprintAbility> fire_shield_variants = new Dictionary<DamageEnergyType, BlueprintAbility>();
@@ -134,6 +135,8 @@ namespace CallOfTheWild
 
         static public BlueprintAbility bladed_dash;
         static public BlueprintAbility bladed_dash_greater;
+        static public BlueprintAbility dimension_door_free;
+        static public BlueprintBuff bladed_dash_buff;
 
         static public BlueprintAbility fiery_runes;
         //static public BlueprintAbility channel_vigor; ?
@@ -298,19 +301,20 @@ namespace CallOfTheWild
 
             List<BlueprintAbility> variants = new List<BlueprintAbility>();
             List<BlueprintBuff> variant_buffs = new List<BlueprintBuff>();
-
+            List<BlueprintBuff> j_buffs = new List<BlueprintBuff>();
             foreach (var judgment in judgments)
             {
                 var judgment_buff = judgment.Buff;
+                j_buffs.Add(judgment_buff);
                 var buff = Helpers.CreateBuff(judgment_buff.name + "LendJudgmentBuff",
                                               "Lend Judgment: " + judgment_buff.Name,
                                               judgment_buff.Description,
                                               "",
                                               judgment_buff.Icon,
                                               judgment_buff.FxOnStart,
-                                              judgment.ComponentsArray.Where(c => !(c is AddFactContextActions)).ToArray()
+                                              judgment_buff.ComponentsArray.Where(c => !(c as AddFactContextActions)).ToArray()
                                               );
-
+               
                 var remove_condition = Helpers.CreateConditional(Common.createContextConditionCasterHasFact(judgment_buff), null, Helpers.Create<ContextActionRemoveSelf>());
                 buff.AddComponent(Helpers.CreateAddFactContextActions(newRound: remove_condition));
 
@@ -326,7 +330,7 @@ namespace CallOfTheWild
                                                     Helpers.roundsPerLevelDuration,
                                                     "",
                                                     Helpers.CreateRunActions(apply_buff),
-                                                    Common.createAbilityShowIfCasterHasFact(judgment_buff),
+                                                    Helpers.Create<NewMechanics.AbilityShowIfCasterHasFact>(a => a.UnitFact = judgment_buff),
                                                     Helpers.CreateSpellComponent(SpellSchool.Divination),
                                                     Helpers.CreateContextRankConfig()
                                                     );
@@ -356,13 +360,15 @@ namespace CallOfTheWild
             List<GameAction> actions = new List<GameAction>();
 
 
-            foreach (var b in variant_buffs)
+            for (int i = 0; i < variant_buffs.Count; i++)
             {
-                var apply_greater = Common.createContextActionApplyBuff(b, Helpers.CreateContextDuration(Helpers.CreateContextValue(AbilityRankType.Default)), is_child: true, dispellable: false);
-                actions.Add(apply_greater);
+                var apply_greater = Common.createContextActionApplyBuff(variant_buffs[i], Helpers.CreateContextDuration(Helpers.CreateContextValue(AbilityRankType.Default)), is_child: true, dispellable: false);
+                var apply_greater_condition = Helpers.CreateConditional(Common.createContextConditionCasterHasFact(j_buffs[i]), apply_greater, null);
+                actions.Add(apply_greater_condition);
             }
 
             greater_buff.AddComponent(Helpers.CreateAddFactContextActions(activated: actions.ToArray()));
+            greater_buff.AddComponent(Helpers.CreateContextRankConfig());
 
             var apply_greater_buff = Common.createContextActionApplyBuff(greater_buff, Helpers.CreateContextDuration(Helpers.CreateContextValue(AbilityRankType.Default)));
             lend_judgement_greater = Helpers.CreateAbility("LendJudgmentGreaterAbility",
@@ -377,7 +383,8 @@ namespace CallOfTheWild
                                                             "",
                                                             Helpers.CreateRunActions(apply_greater_buff),
                                                             Helpers.CreateSpellComponent(SpellSchool.Divination),
-                                                            Helpers.CreateContextRankConfig()
+                                                            Helpers.CreateContextRankConfig(),
+                                                            Common.createAbilityCasterHasFacts(j_buffs.ToArray())
                                                             );
             lend_judgement_greater.setMiscAbilityParametersTouchFriendly(false);
             lend_judgement_greater.AvailableMetamagic = Metamagic.Extend | Metamagic.Heighten | Metamagic.Quicken | Metamagic.Reach;
@@ -464,12 +471,12 @@ namespace CallOfTheWild
         static void createBladedDash()
         {
             var icon = library.Get<BlueprintAbility>("4c349361d720e844e846ad8c19959b1e").Icon; //freedom of movement
-            var dimension_door = library.CopyAndAdd<BlueprintAbility>("a9b8be9b87865744382f7c64e599aeb2", "BladedDashTeleportAbility", "");
-            dimension_door.ActionType = UnitCommand.CommandType.Free;
-            dimension_door.CanTargetEnemies = true;
-            dimension_door.CanTargetFriends = true;
-            dimension_door.Type = AbilityType.Special;
-            dimension_door.SetNameDescriptionIcon("", "", icon);
+            dimension_door_free = library.CopyAndAdd<BlueprintAbility>("a9b8be9b87865744382f7c64e599aeb2", "BladedDashTeleportAbility", "");
+            dimension_door_free.ActionType = UnitCommand.CommandType.Free;
+            dimension_door_free.CanTargetEnemies = true;
+            dimension_door_free.CanTargetFriends = true;
+            dimension_door_free.Type = AbilityType.Special;
+            dimension_door_free.SetNameDescriptionIcon("", "", icon);
 
             var buff = Helpers.CreateBuff("BladedDashBuff",
                                           "",
@@ -484,14 +491,14 @@ namespace CallOfTheWild
                                                 "Bladed Dash",
                                                 "When you cast this spell, you immediately move to any one target in close range, and make a single melee attack against it at your base attack bonus. You gain a circumstance bonus on your attack roll equal to your Intelligence or Charisma modifier, whichever is higher. Despite the name, the spell works with any melee weapon.",
                                                 "",
-                                                dimension_door.Icon,
+                                                dimension_door_free.Icon,
                                                 AbilityType.Spell,
                                                 UnitCommand.CommandType.Standard,
                                                 AbilityRange.Close,
                                                 "",
                                                 "",
                                                 Helpers.CreateRunActions(Common.createContextActionOnContextCaster(Common.createContextActionApplyBuff(buff, Helpers.CreateContextDuration(1), dispellable: false)),
-                                                                         Helpers.Create<ContextActionCastSpell>(c => c.Spell = dimension_door),
+                                                                         Helpers.Create<ContextActionCastSpell>(c => c.Spell = dimension_door_free),
                                                                          Common.createContextActionAttack(Helpers.CreateActionList(Common.createContextActionOnContextCaster(Common.createContextActionRemoveBuff(buff))),
                                                                                                           Helpers.CreateActionList(Common.createContextActionOnContextCaster(Common.createContextActionRemoveBuff(buff)))
                                                                                                          )
@@ -514,7 +521,7 @@ namespace CallOfTheWild
                                     "This spell functions like bladed dash, save that you can make a single melee attack against every creature you pass during the 30 feet of your dash. You cannot attack an individual creature more than once with spell.\n"
                                     + bladed_dash.Name + ": " + bladed_dash.Description,
                                     "",
-                                    dimension_door.Icon,
+                                    dimension_door_free.Icon,
                                     AbilityType.Spell,
                                     UnitCommand.CommandType.Standard,
                                     AbilityRange.Projectile,
@@ -523,7 +530,7 @@ namespace CallOfTheWild
                                     Helpers.CreateRunActions(Helpers.CreateConditional(Helpers.Create<ContextConditionIsEnemy>(), 
                                                                                       new GameAction[]{Common.createContextActionOnContextCaster(Common.createContextActionApplyBuff(buff, Helpers.CreateContextDuration(1), dispellable: false)),
                                                                                                        Helpers.CreateConditional(Helpers.Create<ContextConditionIsMainTarget>(),
-                                                                                                                                 Helpers.Create<ContextActionCastSpell>(c => c.Spell = dimension_door)
+                                                                                                                                 Helpers.Create<ContextActionCastSpell>(c => c.Spell = dimension_door_free)
                                                                                                                                 ),
                                                                                                        Common.createContextActionAttack(),
                                                                                                        Common.createContextActionOnContextCaster(Common.createContextActionRemoveBuff(buff))
@@ -542,6 +549,7 @@ namespace CallOfTheWild
             bladed_dash_greater.AddToSpellList(Helpers.bardSpellList, 5);
 
             bladed_dash_greater.AddSpellAndScroll("02adc587ef2d8a54ababd846072dbef8");
+            bladed_dash_buff = buff;
         }
 
 
@@ -729,7 +737,7 @@ namespace CallOfTheWild
             var ability = Helpers.CreateAbility("GhoulTouchAbility",
                                                 "Ghoul Touch",
                                                 "Imbuing you with negative energy, this spell allows you to paralyze a single living humanoid for the duration of the spell with a successful melee touch attack.\n" +
-                                                "A paralyzed subject exudes a carrion stench that causes all living creatures(except you) in a 10 - foot - radius spread to become sickened(Fortitude negates).A neutralize poison spell removes the effect from a sickened creature, and creatures immune to poison are unaffected by the stench.This is a poison effect.",
+                                                "A paralyzed subject exudes a carrion stench that causes all living creatures (except you) in a 10 - foot - radius spread to become sickened (Fortitude negates). A neutralize poison spell removes the effect from a sickened creature, and creatures immune to poison are unaffected by the stench.This is a poison effect.",
                                                 "",
                                                 icon,
                                                 AbilityType.Spell,
@@ -1020,7 +1028,7 @@ namespace CallOfTheWild
         {
             var hold_monster = library.Get<BlueprintAbility>("41e8a952da7a5c247b3ec1c2dbb73018");
 
-            var checker_fact = hold_monster.GetComponent<AbilityTargetHasNoFactUnless>();
+            var checker_fact = hold_monster.GetComponents<AbilityTargetHasNoFactUnless>().ToArray();
             var does_not_work = hold_monster.GetComponent<AbilityTargetHasFact>();
 
             hold_monster_mass = library.CopyAndAdd<BlueprintAbility>("c7104f7526c4c524f91474614054547e", "HoldMonsterMassAbility", "");
@@ -1029,18 +1037,20 @@ namespace CallOfTheWild
             hold_monster_mass.RemoveComponents<AbilityTargetHasFact>();
             hold_monster_mass.RemoveComponents<RecommendationNoFeatFromGroup>();
             hold_monster_mass.setMiscAbilityParametersRangedDirectional();
-            hold_monster_mass.AddComponent(Helpers.CreateAbilityTargetsAround(30.Feet(), TargetType.Enemy));
+            hold_monster_mass.AddComponent(Helpers.CreateAbilityTargetsAround(15.Feet(), TargetType.Enemy));
 
             hold_monster_mass.SetName("Hold Monster, Mass");
             hold_monster_mass.SetDescription("This spell functions like hold monster, except as noted above.\n" + hold_monster.Description);
 
-            var action = Helpers.CreateConditional(Helpers.CreateConditionsCheckerAnd(Common.createContextConditionHasFacts(false, checker_fact.CheckedFacts), Common.createContextConditionCasterHasFact(checker_fact.UnlessFact, has: false)),
+            var action = Helpers.CreateConditional(Helpers.CreateConditionsCheckerAnd(Common.createContextConditionHasFacts(false, checker_fact[0].CheckedFacts), Common.createContextConditionCasterHasFact(checker_fact[0].UnlessFact, has: false)),
                                                     null,
-                                                    Helpers.CreateConditional(Common.createContextConditionHasFacts(false, does_not_work.CheckedFacts),
-                                                                            null,
-                                                                            hold_monster.GetComponent<AbilityEffectRunAction>().Actions.Actions[0]
-                                                                            )
-
+                                                    Helpers.CreateConditional(Helpers.CreateConditionsCheckerAnd(Common.createContextConditionHasFacts(false, checker_fact[1].CheckedFacts), Common.createContextConditionCasterHasFact(checker_fact[1].UnlessFact, has: false)),
+                                                                              null,
+                                                                                Helpers.CreateConditional(Common.createContextConditionHasFacts(false, does_not_work.CheckedFacts),
+                                                                                                        null,
+                                                                                                        hold_monster.GetComponent<AbilityEffectRunAction>().Actions.Actions[0]
+                                                                                                        )
+                                                                             )
                                                     );
 
             hold_monster_mass.ReplaceComponent<AbilityEffectRunAction>(a => a.Actions = Helpers.CreateActionList(action));
@@ -1165,7 +1175,7 @@ namespace CallOfTheWild
             hold_person_mass.RemoveComponents<AbilityTargetHasFact>();
             hold_person_mass.RemoveComponents<RecommendationNoFeatFromGroup>();
             hold_person_mass.setMiscAbilityParametersRangedDirectional();
-            hold_person_mass.AddComponents(Helpers.CreateAbilityTargetsAround(30.Feet(), TargetType.Enemy));
+            hold_person_mass.AddComponents(Helpers.CreateAbilityTargetsAround(15.Feet(), TargetType.Enemy));
 
             hold_person_mass.SetName("Hold Person, Mass");
             hold_person_mass.SetDescription("This spell functions like hold person, except as noted above.\n" + hold_person.Description);
@@ -2414,7 +2424,7 @@ namespace CallOfTheWild
 
 
             var buff = Helpers.CreateBuff("FrostBiteBuff",
-                                            frost_bite_enchantments[0].Name,
+                                            frost_bite_enchantments[0].Name + " (As Weapon)",
                                             frost_bite_enchantments[0].Description,
                                             "",
                                             icon,
@@ -2436,7 +2446,7 @@ namespace CallOfTheWild
             }
 
             var apply_buff = Common.createContextActionApplyBuff(buff, Helpers.CreateContextDuration(Helpers.CreateContextValue(AbilityRankType.Default), DurationRate.Minutes));
-            frost_bite = Helpers.CreateAbility("FrostBiteAbility",
+            var frost_bite_weapon = Helpers.CreateAbility("FrostBiteWeaponAbility",
                                                   buff.Name,
                                                   buff.Description,
                                                   "",
@@ -2452,10 +2462,36 @@ namespace CallOfTheWild
                                                   Helpers.CreateSpellDescriptor(SpellDescriptor.Cold),
                                                   Common.createAbilityExecuteActionOnCast(Helpers.CreateActionList(Common.createContextActionOnContextCaster(apply_buff)))
                                                   );
-            frost_bite.setMiscAbilityParametersTouchHarmful();
+            frost_bite_weapon.setMiscAbilityParametersTouchHarmful();
 
-            frost_bite.AvailableMetamagic = Kingmaker.UnitLogic.Abilities.Metamagic.Extend | Kingmaker.UnitLogic.Abilities.Metamagic.Heighten | Kingmaker.UnitLogic.Abilities.Metamagic.Empower | Kingmaker.UnitLogic.Abilities.Metamagic.Maximize;
+            frost_bite_weapon.AvailableMetamagic = Kingmaker.UnitLogic.Abilities.Metamagic.Extend | Kingmaker.UnitLogic.Abilities.Metamagic.Heighten | Kingmaker.UnitLogic.Abilities.Metamagic.Empower | Kingmaker.UnitLogic.Abilities.Metamagic.Maximize;
 
+            var frost_bite_charge = Helpers.CreateAbility("FrostBiteChargeAbility",
+                                      "Forstbite",
+                                      "Your melee touch attack deals 1d6 points of cold damage + 1 point per level (max + 10), and the target is fatigued. This spell cannot make a creature exhausted even if it is already fatigued. You can use this melee touch attack up to one time per level.",
+                                      "",
+                                      buff.Icon,
+                                      AbilityType.Spell,
+                                      Kingmaker.UnitLogic.Commands.Base.UnitCommand.CommandType.Standard,
+                                      AbilityRange.Touch,
+                                      "",
+                                      Helpers.savingThrowNone,
+                                      Helpers.CreateRunActions(apply_fatigued, Helpers.CreateActionDealDamage(DamageEnergyType.Cold, Helpers.CreateContextDiceValue(DiceType.D6, 1, Helpers.CreateContextValue(AbilityRankType.Default)))),
+                                      Helpers.CreateSpellComponent(Kingmaker.Blueprints.Classes.Spells.SpellSchool.Transmutation),
+                                      Helpers.CreateSpellDescriptor(SpellDescriptor.Cold),
+                                      Helpers.CreateDeliverTouch(),
+                                      library.Get<BlueprintAbility>("c83447189aabc72489164dfc246f3a36").GetComponent<AbilitySpawnFx>() //from frigid touch
+                                      );
+
+            frost_bite_charge.AvailableMetamagic = frost_bite_weapon.AvailableMetamagic;
+            frost_bite_charge.setMiscAbilityParametersTouchHarmful();
+            var frost_bite_sticky = Helpers.CreateTouchSpellCast(frost_bite_charge);
+            frost_bite_sticky.AddComponents(Helpers.Create<StickyTouchMechnics.AbilityEffectStickyTouchMultiple>(a => a.num_charges = Helpers.CreateContextValue(AbilityRankType.ProjectilesCount)),
+                                 Helpers.CreateContextRankConfig(type: AbilityRankType.ProjectilesCount)
+                                 );
+
+            frost_bite = Common.createVariantWrapper("FrostBiteAbility", "", frost_bite_sticky, frost_bite_weapon);
+            frost_bite.AddComponent(frost_bite_charge.GetComponent<SpellComponent>());
             frost_bite.AddToSpellList(Helpers.druidSpellList, 1);
             frost_bite.AddToSpellList(Helpers.magusSpellList, 1);
             frost_bite.AddSpellAndScroll("1cd597e316ac49941a568312de2be6ae"); //acid maw
@@ -2530,7 +2566,7 @@ namespace CallOfTheWild
                                                                                                   false, false,
                                                                                                   new BlueprintWeaponType[0], WeaponEnchantments.maximize_enchant);
             var buff = Helpers.CreateBuff("ChillTouchBuff",
-                                            chill_touch_echantments[0].Name,
+                                            "Chill Touch (As Weapon)",
                                             chill_touch_echantments[0].Description,
                                             "",
                                             icon,
@@ -2552,7 +2588,7 @@ namespace CallOfTheWild
             }
 
             var apply_buff = Common.createContextActionApplyBuff(buff, Helpers.CreateContextDuration(Helpers.CreateContextValue(AbilityRankType.Default), DurationRate.Minutes));
-            chill_touch = Helpers.CreateAbility("ChillTouchAbility",
+            var chill_touch_weapon = Helpers.CreateAbility("ChillTouchWeaponAbility",
                                                   buff.Name,
                                                   buff.Description,
                                                   "",
@@ -2561,16 +2597,52 @@ namespace CallOfTheWild
                                                   Kingmaker.UnitLogic.Commands.Base.UnitCommand.CommandType.Standard,
                                                   AbilityRange.DoubleMove,
                                                   Helpers.minutesPerLevelDuration,
-                                                  "",
+                                                  "Fortitude partial or Will negates",
                                                   Helpers.CreateRunActions(Common.createContextActionForceAttack()),
                                                   Helpers.CreateSpellComponent(Kingmaker.Blueprints.Classes.Spells.SpellSchool.Necromancy),
                                                   Helpers.Create<NewMechanics.AbilityCasterPrimaryHandFree>(),
-                                                  Helpers.CreateSpellDescriptor(SpellDescriptor.Cold),
                                                   Common.createAbilityExecuteActionOnCast(Helpers.CreateActionList(Common.createContextActionOnContextCaster(apply_buff)))
                                                   );
-            chill_touch.setMiscAbilityParametersTouchHarmful();
+            chill_touch_weapon.setMiscAbilityParametersTouchHarmful();
 
-            chill_touch.AvailableMetamagic = Kingmaker.UnitLogic.Abilities.Metamagic.Extend | Kingmaker.UnitLogic.Abilities.Metamagic.Heighten | Kingmaker.UnitLogic.Abilities.Metamagic.Empower | Kingmaker.UnitLogic.Abilities.Metamagic.Maximize;
+            chill_touch_weapon.AvailableMetamagic = Kingmaker.UnitLogic.Abilities.Metamagic.Extend | Kingmaker.UnitLogic.Abilities.Metamagic.Heighten | Kingmaker.UnitLogic.Abilities.Metamagic.Empower | Kingmaker.UnitLogic.Abilities.Metamagic.Maximize;
+
+
+            var charge_on_living = Helpers.CreateConditionalSaved(null, Helpers.CreateActionDealDamage(StatType.Strength, Helpers.CreateContextDiceValue(DiceType.Zero, bonus: 1)));
+            var charge_on_undead = Helpers.CreateConditionalSaved(null, Common.createContextActionApplyBuff(frightened, Helpers.CreateContextDuration(Helpers.CreateContextValue(AbilityRankType.Default), diceType: DiceType.D4, diceCount: 1)));
+            var charge_effect = Helpers.CreateConditional(Helpers.CreateConditionHasFact(undead),
+                                                   new GameAction[] { Common.createContextActionSavingThrow(SavingThrowType.Will, Helpers.CreateActionList(charge_on_undead)) },
+                                                   new GameAction[] {Common.createContextActionSavingThrow(SavingThrowType.Fortitude, Helpers.CreateActionList(charge_on_living)),
+                                                                     Helpers.CreateActionDealDamage(DamageEnergyType.NegativeEnergy, Helpers.CreateContextDiceValue(DiceType.D6, 1, 0))
+                                                                     }
+                                                  );
+            var chill_touch_charge = Helpers.CreateAbility("ChillTouchChargeAbility",
+                                                           "Chill Touch",
+                                                           "A touch from your hand, which glows with blue energy, disrupts the life force of living creatures. Each touch channels negative energy that deals 1d6 points of damage. The touched creature also takes 1 point of Strength damage unless it makes a successful Fortitude saving throw.  You can make one touch attack per caster level.\n"
+                                                           + "An undead creature you touch takes no damage of either sort, but it must make a successful Will saving throw or flee as if panicked for 1d4 rounds + 1 round per caster level (max + 10)\n.",
+                                                           "",
+                                                           chill_touch_weapon.Icon,
+                                                           AbilityType.Spell,
+                                                           UnitCommand.CommandType.Standard,
+                                                           AbilityRange.Touch,
+                                                           "",
+                                                           "Fortitude partial or Will negates",
+                                                           Helpers.CreateRunActions(charge_effect),
+                                                           Helpers.CreateDeliverTouch(),
+                                                           Helpers.CreateSpellComponent(Kingmaker.Blueprints.Classes.Spells.SpellSchool.Necromancy),
+                                                           library.Get<BlueprintAbility>("cbecdd04ad2523c438123ef596fd2b9f").GetComponent<AbilitySpawnFx>(), //touch of fatigue fx
+                                                           Helpers.CreateContextRankConfig(max: 10)
+                                                           );
+            chill_touch_charge.setMiscAbilityParametersTouchHarmful();
+            chill_touch_charge.SpellResistance = true;
+            chill_touch_charge.AvailableMetamagic = chill_touch_weapon.AvailableMetamagic;
+            var chill_touch_sticky = Helpers.CreateTouchSpellCast(chill_touch_charge);
+            chill_touch_sticky.AddComponents(Helpers.Create<StickyTouchMechnics.AbilityEffectStickyTouchMultiple>(a => a.num_charges = Helpers.CreateContextValue(AbilityRankType.ProjectilesCount)),
+                                             Helpers.CreateContextRankConfig(type: AbilityRankType.ProjectilesCount)
+                                             );
+
+            chill_touch = Common.createVariantWrapper("ChillTouchAbility", "", chill_touch_sticky, chill_touch_weapon);
+            chill_touch.AddComponent(chill_touch_charge.GetComponent<SpellComponent>());
 
             chill_touch.AddToSpellList(Helpers.wizardSpellList, 1);
             chill_touch.AddToSpellList(Helpers.magusSpellList, 1);
@@ -2789,11 +2861,12 @@ namespace CallOfTheWild
                                                 AbilityType.Spell,
                                                 Kingmaker.UnitLogic.Commands.Base.UnitCommand.CommandType.Standard,
                                                 AbilityRange.Touch,
-                                                Helpers.oneMinuteDuration,
+                                                Helpers.minutesPerLevelDuration,
                                                 "",
                                                 Helpers.CreateRunActions(apply_buff),
                                                 Common.createAbilitySpawnFx("352469f228a3b1f4cb269c7ab0409b8e", anchor: AbilitySpawnFxAnchor.SelectedTarget), //CommonTransmutationBuff00
-                                                Helpers.CreateSpellComponent(SpellSchool.Transmutation)
+                                                Helpers.CreateSpellComponent(SpellSchool.Transmutation),
+                                                Helpers.CreateContextRankConfig()
                                                 );
 
             flame_arrow.AvailableMetamagic = Metamagic.Empower | Metamagic.Extend | Metamagic.Heighten | Metamagic.Quicken | Metamagic.Maximize | Metamagic.Reach;
@@ -2814,7 +2887,7 @@ namespace CallOfTheWild
 
             countless_eyes.SetName("Countless Eyes");
             countless_eyes.SetDescription("The target sprouts extra eyes all over its body, including on the back of its head. It gains all-around vision and cannot be flanked.");
-
+            countless_eyes.LocalizedDuration = Helpers.CreateString("CountlessEyes.Duration", Helpers.hourPerLevelDuration);
             var buff = Helpers.CreateBuff("NoFlankingBuff",
                                           "",
                                           "",
@@ -3512,44 +3585,63 @@ namespace CallOfTheWild
 
         static void createCommand()
         {
-            var dominate_person = library.Get<BlueprintAbility>("d7cbd2004ce66a042aeab2e95a3c5c61");
-            BlueprintBuff[] buffs = new BlueprintBuff[]{library.Get<BlueprintBuff>("9934fedff1b14994ea90205d189c8759"), //daze
-                                                         library.Get<BlueprintBuff>("24cf3deb078d3df4d92ba24b176bda97"), //prone
-                                                         library.Get<BlueprintBuff>("f08a7239aa961f34c8301518e71d4cdf") //frightened
+            var dominate_monster = library.Get<BlueprintAbility>("3c17035ec4717674cae2e841a190e757");
+            BlueprintBuff[] buffs = new BlueprintBuff[]{library.CopyAndAdd<BlueprintBuff>("9934fedff1b14994ea90205d189c8759", "DazeCommandBuff", ""), //daze
+                                                         library.CopyAndAdd<BlueprintBuff>("bd9d11c630f645443b8a1061044d5cf0", "ProneCommandBuff", ""), //prone
+                                                         library.CopyAndAdd<BlueprintBuff>("f08a7239aa961f34c8301518e71d4cdf", "FrightenedCommandBuff", "") //frightened
                                                         };
+            buffs[2].ReplaceComponent<AddCondition>(Common.createBuffStatusCondition(Kingmaker.UnitLogic.UnitCondition.Frightened, SavingThrowType.Will, save_each_round: true));
+            foreach (var b in buffs)
+            {
+                b.ReplaceComponent<BuffStatusCondition>(s => { s.SaveEachRound = true; s.SaveType = SavingThrowType.Will; });
+            }
             string[] names = { "Halt", "Fall", "Run" };
             string[] descriptions = { "The subject stands in place for 1 round. It may not take any actions but is not considered helpless.",
                                       "On its turn, the subject falls to the ground and remains prone for 1 round. It may act normally while prone but takes any appropriate penalties.",
                                       "On its turn, the subject moves away from you as quickly as possible for 1 round. It may do nothing but move during its turn, and it provokes attacks of opportunity for this movement as normal." };
 
             List<BlueprintAbility> commands = new List<BlueprintAbility>();
-
+            List<BlueprintAbility> greater_commands = new List<BlueprintAbility>();
 
             command = Helpers.CreateAbility("CommandSpellAbility",
                                             "Command",
                                             "You give the subject a single command, which it obeys to the best of its ability at its earliest opportunity.",
                                             "",
-                                            dominate_person.Icon,
+                                            dominate_monster.Icon,
                                             AbilityType.Spell,
                                             Kingmaker.UnitLogic.Commands.Base.UnitCommand.CommandType.Standard,
                                             AbilityRange.Close,
                                             Helpers.oneRoundDuration,
-                                            Helpers.willNegates);
+                                            Helpers.willNegates,
+                                            dominate_monster.GetComponent<SpellDescriptorComponent>(),
+                                            dominate_monster.GetComponent<SpellComponent>()
+                                            );
 
-            command.EffectOnEnemy = AbilityEffectOnUnit.Harmful;
-            command.EffectOnAlly = AbilityEffectOnUnit.Harmful;
-            command.CanTargetEnemies = true;
-            command.CanTargetFriends = true;
-            command.CanTargetSelf = false;
-            command.CanTargetPoint = false;
-            command.Animation = dominate_person.Animation;
-            command.AnimationStyle = dominate_person.AnimationStyle;
-            command.AddComponent(dominate_person.GetComponent<SpellDescriptorComponent>());
-            command.AddComponent(dominate_person.GetComponent<SpellComponent>());
-            command.AvailableMetamagic = Metamagic.Heighten | Metamagic.Quicken | Metamagic.Reach | Metamagic.Extend;
+            command.setMiscAbilityParametersSingleTargetRangedHarmful();
+            command.AvailableMetamagic = Metamagic.Heighten | Metamagic.Quicken | Metamagic.Reach;
             command.SpellResistance = true;
 
 
+            var checker_fact = dominate_monster.GetComponents<AbilityTargetHasNoFactUnless>().ToArray();
+            var does_not_work = dominate_monster.GetComponent<AbilityTargetHasFact>();
+
+            command_greater = Helpers.CreateAbility("CommandGreaterSpellAbility",
+                                "Command, Greater",
+                                "This spell functions like command, except several creatures may be affected, and the activities continue beyond 1 round. At the start of each commanded creature’s action after the first, it gets another Will save to attempt to break free from the spell. Each creature must receive the same command.",
+                                "",
+                                dominate_monster.Icon,
+                                AbilityType.Spell,
+                                Kingmaker.UnitLogic.Commands.Base.UnitCommand.CommandType.Standard,
+                                AbilityRange.Close,
+                                Helpers.roundsPerLevelDuration,
+                                Helpers.willNegates,
+                                dominate_monster.GetComponent<SpellDescriptorComponent>(),
+                                Helpers.CreateAbilityTargetsAround(15.Feet(), TargetType.Enemy),
+                                dominate_monster.GetComponent<SpellComponent>());
+
+            command_greater.setMiscAbilityParametersRangedDirectional();
+            command_greater.AvailableMetamagic = Metamagic.Heighten | Metamagic.Quicken | Metamagic.Reach | Metamagic.Extend;
+            command_greater.SpellResistance = true;
 
             for (int i = 0; i < buffs.Length; i++)
             {
@@ -3558,22 +3650,52 @@ namespace CallOfTheWild
                 variant_command.SetName($"Command ({names[i]})");
 
                 var buff_action = Common.createContextSavedApplyBuff(buffs[i],
-                                                                      Helpers.CreateContextDuration(Common.createSimpleContextValue(1), DurationRate.Rounds)
+                                                                      Helpers.CreateContextDuration(Helpers.CreateContextValue(AbilityRankType.Default), DurationRate.Rounds)
                                                                      );
                 var buff_save = Common.createContextActionSavingThrow(SavingThrowType.Will, Helpers.CreateActionList(buff_action));
 
                 variant_command.AddComponent(Helpers.CreateRunActions(buff_save));
-                variant_command.AddComponent(dominate_person.GetComponent<AbilitySpawnFx>());
-                variant_command.AddComponent(dominate_person.GetComponent<AbilityTargetHasFact>());
-                variant_command.AddComponents(dominate_person.GetComponents<AbilityTargetHasNoFactUnless>());
+                variant_command.AddComponent(dominate_monster.GetComponent<AbilitySpawnFx>());
+                variant_command.AddComponent(Helpers.CreateContextRankConfig(min: 1, max: 1)); 
+                variant_command.AddComponent(dominate_monster.GetComponent<AbilityTargetHasFact>());
+                variant_command.AddComponents(dominate_monster.GetComponents<AbilityTargetHasNoFactUnless>());
                 commands.Add(variant_command);
+
+                var variant_greater = library.CopyAndAdd<BlueprintAbility>(command_greater.AssetGuid, $"CommandGreateSpell{i + 1}Ability", "");
+                variant_greater.SetName($"Command, Greater ({names[i]})");
+                variant_greater.SetDescription(descriptions[i]);
+                variant_greater.AddComponent(Helpers.CreateContextRankConfig());
+
+                var action = Helpers.CreateConditional(Helpers.CreateConditionsCheckerAnd(Common.createContextConditionHasFacts(false, checker_fact[0].CheckedFacts), Common.createContextConditionCasterHasFact(checker_fact[0].UnlessFact, has: false)),
+                                                        null,
+                                                        Helpers.CreateConditional(Helpers.CreateConditionsCheckerAnd(Common.createContextConditionHasFacts(false, checker_fact[1].CheckedFacts), Common.createContextConditionCasterHasFact(checker_fact[1].UnlessFact, has: false)),
+                                                                                  null,
+                                                                                    Helpers.CreateConditional(Common.createContextConditionHasFacts(false, does_not_work.CheckedFacts),
+                                                                                                            null,
+                                                                                                            buff_save
+                                                                                                            )
+                                                                                 )
+                                                        );
+                variant_greater.AddComponent(Helpers.CreateRunActions(action));
+                variant_greater.AddComponent(dominate_monster.GetComponent<AbilitySpawnFx>());
+
+                greater_commands.Add(variant_greater);
             }
 
+            
             command.AddComponent(command.CreateAbilityVariants(commands));
             command.AddToSpellList(Helpers.clericSpellList, 1);
             command.AddToSpellList(Helpers.inquisitorSpellList, 1);
-
             command.AddSpellAndScroll("f199f6e5026488c499042900b572eb7f"); //dominate person
+
+            command_greater.AddComponents(command_greater.CreateAbilityVariants(greater_commands));
+            command_greater.AddToSpellList(Helpers.clericSpellList, 5);
+            command_greater.AddToSpellList(Helpers.inquisitorSpellList, 5);
+            command_greater.AddSpellAndScroll("f199f6e5026488c499042900b572eb7f"); //dominate person
+
+            //nobility domain fix
+            Common.replaceDomainSpell(library.Get<BlueprintProgression>("8480f2d1ca764774895ee6fd610a568e"), command_greater, 5);
+
         }
 
 

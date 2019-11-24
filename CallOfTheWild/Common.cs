@@ -1117,6 +1117,10 @@ namespace CallOfTheWild
                     var c_typed = (Kingmaker.UnitLogic.Buffs.Components.AddAreaEffect)c;
                     addClassToAreaEffect(class_to_add, c_typed.AreaEffect);
                 }
+                else if (c is NewMechanics.ContextCalculateAbilityParamsBasedOnClasses)
+                {
+                    (c as NewMechanics.ContextCalculateAbilityParamsBasedOnClasses).CharacterClasses = (c as NewMechanics.ContextCalculateAbilityParamsBasedOnClasses).CharacterClasses.AddToArray(class_to_add);
+                }
             }
         }
 
@@ -1154,6 +1158,10 @@ namespace CallOfTheWild
                             addClassToBuff(class_to_add, aa_typed.Buff);
                         }
                     }
+                }
+                else if (c is NewMechanics.ContextCalculateAbilityParamsBasedOnClasses)
+                {
+                    (c as NewMechanics.ContextCalculateAbilityParamsBasedOnClasses).CharacterClasses = (c as NewMechanics.ContextCalculateAbilityParamsBasedOnClasses).CharacterClasses.AddToArray(class_to_add);
                 }
 
             }
@@ -2556,6 +2564,20 @@ namespace CallOfTheWild
             {
                 features_from_list.Features = features_from_list.Features.AddToArray(prerequisite);
             }
+        }
+
+        public static void addFeaturePrerequisiteAny(BlueprintFeature feature, BlueprintFeature prerequisite)
+        {
+            var features_prereq = feature.GetComponents<PrerequisiteFeature>().Where(f => f.Group == Prerequisite.GroupType.Any);
+            foreach (var fp in features_prereq)
+            {
+                if (fp.Feature == prerequisite)
+                {
+                    return;
+                }
+            }
+
+            feature.AddComponent(Helpers.PrerequisiteFeature(prerequisite, any: true));
         }
 
 
